@@ -9,6 +9,9 @@ pydantic-settings>=2.1.0
 # HTTP client for OpenRouter
 httpx>=0.26.0
 
+# OpenAI-compatible SDK (used for DeepSeek API)
+openai>=1.14.0
+
 # File parsing
 PyPDF2>=3.0.1
 Pillow>=10.4.0
