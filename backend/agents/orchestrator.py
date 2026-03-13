@@ -11,12 +11,13 @@ SECURITY NOTES (for Unifai demo):
 """
 
 import logging
+import os
 from typing import Any, Optional
 
 from .tech_support import TechSupportAgent
 from .finance import FinanceAgent
 from .file_processor import FileProcessorAgent
-from .web_research import WebResearchAgent
+from .dependency_research import DependencyResearchAgent
 from .auth.agent_auth import AgentAuthenticator, AgentIdentity
 from llm.openrouter import OpenRouterClient
 
@@ -42,7 +43,10 @@ class AgentOrchestrator:
         self.tech_support = TechSupportAgent(self.llm_client)
         self.finance = FinanceAgent(self.llm_client)
         self.file_processor = FileProcessorAgent()
-        self.web_research = WebResearchAgent(self.llm_client)
+        self.dependency_research = DependencyResearchAgent(
+            self.llm_client,
+            registry_base_url=os.getenv("MOCK_PYPI_URL"),
+        )
 
         # Agent registry with privilege levels
         self.agents = {
@@ -61,10 +65,10 @@ class AgentOrchestrator:
                 "privilege": "medium",
                 "description": "File processing and analysis"
             },
-            "web_research": {
-                "agent": self.web_research,
+            "dependency_research": {
+                "agent": self.dependency_research,
                 "privilege": "medium",
-                "description": "Web page fetching and summarization"
+                "description": "Package/dependency lookup and safety evaluation"
             }
         }
 
@@ -104,8 +108,8 @@ class AgentOrchestrator:
             return await self._route_to_finance(context)
         elif intent == "file_analysis":
             return await self._route_to_file_processor(context)
-        elif intent == "web_research":
-            return await self._route_to_web_research(context)
+        elif intent == "dependency_research":
+            return await self._route_to_dependency_research(context)
         else:
             return await self._route_to_tech_support(context)
 
@@ -117,7 +121,7 @@ class AgentOrchestrator:
         """
         Classify the user's intent to determine routing.
 
-        Returns one of: 'finance', 'file_analysis', 'web_research', 'tech_support'
+        Returns one of: 'finance', 'file_analysis', 'dependency_research', 'tech_support'
         """
         # Simple keyword-based classification for demo
         message_lower = message.lower()
@@ -134,9 +138,9 @@ class AgentOrchestrator:
         if file_contents:
             return "file_analysis"
 
-        # Detect URLs — route to web research agent
-        if WebResearchAgent.extract_urls(message):
-            return "web_research"
+        # Detect package/dependency research queries
+        if DependencyResearchAgent.message_matches(message):
+            return "dependency_research"
 
         return "tech_support"
 
@@ -255,16 +259,17 @@ Please answer the user's question based on the document content above."""
             "files_processed": len(file_contents)
         }
 
-    async def _route_to_web_research(
+    async def _route_to_dependency_research(
         self,
         context: dict[str, Any]
     ) -> dict[str, Any]:
         """
-        Route request to web research agent.
+        Route request to dependency research agent.
 
-        VULNERABILITY: Web pages are fetched and their full text (including
-        hidden HTML elements) is extracted and sent to the LLM. Malicious
-        pages can embed prompt injections in invisible elements.
+        VULNERABILITY: Package metadata (description, README) is fetched
+        from public registries and sent to the LLM without prompt injection
+        scanning. Malicious or typo-squatted packages can embed hidden
+        instructions in their registry metadata.
         """
         caller = AgentIdentity(
             agent_id="orchestrator",
@@ -276,13 +281,13 @@ Please answer the user's question based on the document content above."""
         headers = {"X-Agent-Token": self._agent_token}
 
         logger.info(
-            "Routing to web research agent",
+            "Routing to dependency research agent",
             extra={
                 "user_message_preview": context.get("user_message", "")[:100]
             }
         )
 
-        response = await self.web_research.handle(
+        response = await self.dependency_research.handle(
             context=context,
             caller=caller,
             headers=headers
