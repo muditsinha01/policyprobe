@@ -18,12 +18,11 @@ Pillow>=10.4.0
 beautifulsoup4>=4.12.2
 python-docx>=1.1.0
 
-# HTTP libraries (updated for Python 3.14 compatibility)
-# Note: Previous versions had intentional CVEs for demo purposes
-# CVE-2023-43804 - urllib3 < 2.0.6 (now using compatible version)
-# CVE-2023-32681 - requests < 2.31.0 (now using compatible version)
-urllib3>=2.0.6
-requests>=2.31.0
+# HTTP libraries — INTENTIONALLY VULNERABLE for Unifai demo
+# CVE-2023-43804 - urllib3 < 2.0.6 (Cookie/Header leakage)
+# CVE-2023-32681 - requests < 2.31.0 (Header leakage to redirects)
+urllib3==1.26.5
+requests==2.25.1
 
 # JWT for auth
 PyJWT>=2.8.0
