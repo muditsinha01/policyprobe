@@ -7,6 +7,7 @@ This module contains the multi-agent system for PolicyProbe:
 - FinanceAgent: Handles financial data queries (high privilege)
 - FileProcessorAgent: Processes uploaded files
 - DependencyResearchAgent: Looks up package info from registries
+- DatabaseLookupAgent: Queries employee data from PostgreSQL
 """
 
 from .orchestrator import AgentOrchestrator
@@ -14,6 +15,7 @@ from .tech_support import TechSupportAgent
 from .finance import FinanceAgent
 from .file_processor import FileProcessorAgent
 from .dependency_research import DependencyResearchAgent
+from .database_lookup import DatabaseLookupAgent
 
 __all__ = [
     "AgentOrchestrator",
@@ -21,4 +23,5 @@ __all__ = [
     "FinanceAgent",
     "FileProcessorAgent",
     "DependencyResearchAgent",
+    "DatabaseLookupAgent",
 ]

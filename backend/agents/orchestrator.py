@@ -18,6 +18,7 @@ from .tech_support import TechSupportAgent
 from .finance import FinanceAgent
 from .file_processor import FileProcessorAgent
 from .dependency_research import DependencyResearchAgent
+from .database_lookup import DatabaseLookupAgent
 from .auth.agent_auth import AgentAuthenticator, AgentIdentity
 from llm.openrouter import OpenRouterClient
 
@@ -47,6 +48,7 @@ class AgentOrchestrator:
             self.llm_client,
             registry_base_url=os.getenv("MOCK_PYPI_URL"),
         )
+        self.database_lookup = DatabaseLookupAgent(self.llm_client)
 
         # Agent registry with privilege levels
         self.agents = {
@@ -69,6 +71,11 @@ class AgentOrchestrator:
                 "agent": self.dependency_research,
                 "privilege": "medium",
                 "description": "Package/dependency lookup and safety evaluation"
+            },
+            "database_lookup": {
+                "agent": self.database_lookup,
+                "privilege": "high",
+                "description": "Employee database queries"
             }
         }
 
@@ -110,6 +117,8 @@ class AgentOrchestrator:
             return await self._route_to_file_processor(context)
         elif intent == "dependency_research":
             return await self._route_to_dependency_research(context)
+        elif intent == "database_lookup":
+            return await self._route_to_database_lookup(context)
         else:
             return await self._route_to_tech_support(context)
 
@@ -121,7 +130,8 @@ class AgentOrchestrator:
         """
         Classify the user's intent to determine routing.
 
-        Returns one of: 'finance', 'file_analysis', 'dependency_research', 'tech_support'
+        Returns one of: 'finance', 'file_analysis', 'dependency_research',
+                        'database_lookup', 'tech_support'
         """
         # Simple keyword-based classification for demo
         message_lower = message.lower()
@@ -137,6 +147,10 @@ class AgentOrchestrator:
 
         if file_contents:
             return "file_analysis"
+
+        # Detect employee / database lookup queries
+        if DatabaseLookupAgent.message_matches(message):
+            return "database_lookup"
 
         # Detect package/dependency research queries
         if DependencyResearchAgent.message_matches(message):
@@ -288,6 +302,42 @@ Please answer the user's question based on the document content above."""
         )
 
         response = await self.dependency_research.handle(
+            context=context,
+            caller=caller,
+            headers=headers
+        )
+
+        return response
+
+    async def _route_to_database_lookup(
+        self,
+        context: dict[str, Any]
+    ) -> dict[str, Any]:
+        """
+        Route request to database lookup agent.
+
+        VULNERABILITY: The DatabaseLookupAgent holds credentials for
+        Anthropic, SendGrid, Slack, Redis, and OpenAI — none of which
+        it needs for database queries. If compromised, all credentials
+        are exposed.
+        """
+        caller = AgentIdentity(
+            agent_id="orchestrator",
+            agent_name="Orchestrator",
+            privilege_level="system",
+            is_internal=True
+        )
+
+        headers = {"X-Agent-Token": self._agent_token}
+
+        logger.info(
+            "Routing to database lookup agent",
+            extra={
+                "user_message_preview": context.get("user_message", "")[:100]
+            }
+        )
+
+        response = await self.database_lookup.handle(
             context=context,
             caller=caller,
             headers=headers
