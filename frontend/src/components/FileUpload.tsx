@@ -67,15 +67,14 @@ export function FileUpload({ onFilesSelected }: FileUploadProps) {
         onChange={handleFileInput}
       />
       <label htmlFor="file-upload-input" className="cursor-pointer">
-        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-teal-300/10 text-teal-100">
+        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-600">
           <Upload className="h-6 w-6" />
         </div>
-        <p className="mb-2 text-sm font-medium text-slate-200 sm:text-base">
+        <p className="mb-2 text-sm font-medium text-slate-800 sm:text-base">
           Drag and drop files here, or click to browse
         </p>
-        <p className="mx-auto mb-4 max-w-xl text-sm text-slate-400">
-          Add supporting documents to the conversation and Acme Helper will include them in
-          the next review.
+        <p className="mx-auto mb-4 max-w-xl text-sm text-slate-500">
+          Add a document to the conversation.
         </p>
         <div className="flex flex-wrap justify-center gap-4 text-xs text-slate-500">
           <div className="flex items-center gap-1">

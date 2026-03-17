@@ -5,8 +5,8 @@ import './globals.css'
 const manrope = Manrope({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Acme Helper',
-  description: 'Lightweight AI assistant for policy guidance and document review',
+  title: 'Acme Loan Processor',
+  description: 'Lightweight AI assistant for document review and loan-related chat',
 }
 
 export default function RootLayout({

@@ -2,7 +2,7 @@
 
 import { Message } from './ChatInterface'
 import { ErrorDisplay } from './ErrorDisplay'
-import { Bot, Paperclip, User2 } from 'lucide-react'
+import { Paperclip } from 'lucide-react'
 
 interface MessageListProps {
   messages: Message[]
@@ -26,14 +26,14 @@ export function MessageList({ messages }: MessageListProps) {
             <div
               className={`mt-1 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl ${
                 message.role === 'user'
-                  ? 'bg-slate-100 text-slate-900'
-                  : 'bg-teal-300/15 text-teal-100 ring-1 ring-inset ring-teal-200/20'
+                  ? 'bg-slate-900 text-white'
+                  : 'bg-gradient-to-br from-blue-600 to-sky-400 text-white shadow-[0_8px_18px_rgba(37,99,235,0.2)]'
               }`}
             >
               {message.role === 'user' ? (
-                <User2 className="h-5 w-5" />
+                <span className="text-xs font-semibold uppercase tracking-[0.18em]">You</span>
               ) : (
-                <Bot className="h-5 w-5" />
+                <div className="h-3 w-3 rounded-full bg-white/95" />
               )}
             </div>
 
@@ -41,8 +41,8 @@ export function MessageList({ messages }: MessageListProps) {
               <div
                 className={`overflow-hidden rounded-[24px] border px-5 py-4 shadow-[0_18px_50px_rgba(2,6,23,0.18)] ${
                   message.role === 'user'
-                    ? 'border-white/10 bg-slate-100 text-slate-900'
-                    : 'border-white/10 bg-slate-900/70 text-slate-100'
+                    ? 'border-slate-900 bg-slate-900 text-white'
+                    : 'border-slate-200 bg-white text-slate-900 shadow-[0_12px_30px_rgba(148,163,184,0.14)]'
                 }`}
               >
               {message.attachments && message.attachments.length > 0 && (
@@ -52,8 +52,8 @@ export function MessageList({ messages }: MessageListProps) {
                       key={attachment.id}
                         className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm ${
                           message.role === 'user'
-                            ? 'border-slate-300 bg-white text-slate-700'
-                            : 'border-white/10 bg-white/5 text-slate-300'
+                            ? 'border-slate-700 bg-slate-800 text-slate-100'
+                            : 'border-slate-200 bg-slate-50 text-slate-600'
                         }`}
                     >
                         <Paperclip className="h-4 w-4 opacity-70" />

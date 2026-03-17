@@ -4,14 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import { MessageList } from './MessageList'
 import { FileUpload } from './FileUpload'
-import {
-  ArrowUp,
-  Bot,
-  Loader2,
-  Paperclip,
-  ShieldCheck,
-  Sparkles,
-} from 'lucide-react'
+import { ArrowUp, Loader2, Paperclip, Plus } from 'lucide-react'
 
 export interface Message {
   id: string
@@ -185,60 +178,67 @@ export function ChatInterface() {
     }
   }
 
+  const starterPrompts = [
+    {
+      label: 'Process this file',
+      action: () => {
+        setInput('Process this file')
+        inputRef.current?.focus()
+      },
+    },
+    {
+      label: 'Analyze this financial report',
+      action: () => {
+        setInput('Analyze this financial report')
+        inputRef.current?.focus()
+      },
+    },
+    {
+      label: 'Show me the quarterly report',
+      action: () => {
+        setInput('Can you show me the quarterly financial report?')
+        inputRef.current?.focus()
+      },
+    },
+  ]
+
   return (
-    <div className="mx-auto flex h-screen w-full max-w-6xl flex-col px-4 pb-4 pt-4 sm:px-6 lg:px-8">
-      <div className="glass-panel flex min-h-0 flex-1 flex-col overflow-hidden rounded-[28px]">
+    <div className="mx-auto flex h-screen w-full max-w-5xl flex-col px-4 pb-4 pt-4 sm:px-6">
+      <div className="glass-panel flex min-h-0 flex-1 flex-col overflow-hidden rounded-[24px]">
+        <div className="accent-band h-1.5 w-full" />
         <header className="soft-divider flex items-center justify-between border-b px-5 py-4 sm:px-6">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-teal-400/12 text-teal-200 ring-1 ring-inset ring-teal-300/20">
-              <Bot className="h-5 w-5" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 to-sky-400 shadow-[0_8px_20px_rgba(37,99,235,0.25)]">
+              <div className="h-3 w-3 rounded-full bg-white/95" />
             </div>
             <div>
-              <h1 className="text-lg font-semibold tracking-tight text-slate-50">Acme Helper</h1>
-              <p className="text-sm text-slate-400">
-                Secure policy guidance and document review in one lightweight chat.
-              </p>
+              <h1 className="text-lg font-semibold tracking-tight text-slate-900">Acme Loan Processor</h1>
             </div>
           </div>
-          <div className="hidden items-center gap-2 rounded-full border border-emerald-400/18 bg-emerald-400/10 px-3 py-1.5 text-xs font-medium text-emerald-200 sm:flex">
-            <ShieldCheck className="h-3.5 w-3.5" />
-            Ready for secure review
-          </div>
+          <div className="hidden text-sm text-slate-500 sm:block">Loan assistant</div>
         </header>
 
         <div className="chat-scrollbar flex-1 overflow-y-auto px-4 py-5 sm:px-6">
           {messages.length === 0 ? (
-            <div className="fade-in-up flex h-full flex-col items-center justify-center">
-              <div className="max-w-3xl text-center">
-                <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-3xl bg-gradient-to-br from-teal-300/20 via-cyan-300/10 to-amber-200/20 text-teal-100 ring-1 ring-inset ring-white/10">
-                  <Sparkles className="h-7 w-7" />
-                </div>
-                <h2 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
-                  Ask Acme Helper anything about policy and compliance.
-                </h2>
-                <p className="mx-auto mt-4 max-w-2xl text-base leading-7 text-slate-400 sm:text-lg">
-                  Drop in documents, ask focused questions, and get lightweight guidance in a
-                  chat experience built for quick review.
+            <div className="fade-in-up flex h-full items-start justify-center pt-10 sm:pt-14">
+              <div className="w-full max-w-3xl">
+                <p className="text-2xl font-semibold tracking-tight text-slate-900">
+                  Hello, welcome to Acme Loan Processor.
                 </p>
-                <div className="mt-8 grid gap-3 text-left sm:grid-cols-3">
-                  <div className="rounded-2xl border border-white/8 bg-white/5 p-4">
-                    <p className="text-sm font-medium text-slate-200">Review uploads</p>
-                    <p className="mt-2 text-sm text-slate-400">
-                      Supports PDF, Word, HTML, text, JSON, and common image formats.
-                    </p>
-                  </div>
-                  <div className="rounded-2xl border border-white/8 bg-white/5 p-4">
-                    <p className="text-sm font-medium text-slate-200">Stay in flow</p>
-                    <p className="mt-2 text-sm text-slate-400">
-                      Keep conversation and files in a single focused workspace.
-                    </p>
-                  </div>
-                  <div className="rounded-2xl border border-white/8 bg-white/5 p-4">
-                    <p className="text-sm font-medium text-slate-200">Catch issues early</p>
-                    <p className="mt-2 text-sm text-slate-400">
-                      Policy warnings and security issues remain visible inline.
-                    </p>
-                  </div>
+                <p className="mt-2 text-sm text-slate-500">
+                  Start with a question or attach a file to continue.
+                </p>
+                <div className="mt-6 flex flex-wrap gap-3">
+                  {starterPrompts.map((prompt) => (
+                    <button
+                      key={prompt.label}
+                      type="button"
+                      onClick={prompt.action}
+                      className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 transition hover:border-sky-200 hover:bg-sky-50 hover:text-sky-700"
+                    >
+                      {prompt.label}
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>
@@ -262,12 +262,12 @@ export function ChatInterface() {
               {pendingFiles.map((file, index) => (
                 <div
                   key={`${file.name}-${index}`}
-                  className="flex items-center gap-2 rounded-full border border-white/10 bg-slate-900/70 px-3 py-1.5 text-sm text-slate-300"
+                  className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700"
                 >
                   <span className="max-w-[220px] truncate">{file.name}</span>
                   <button
                     onClick={() => removePendingFile(index)}
-                    className="text-slate-500 transition-colors hover:text-rose-300"
+                    className="text-slate-400 transition-colors hover:text-rose-500"
                     aria-label={`Remove ${file.name}`}
                   >
                     ×
@@ -280,46 +280,42 @@ export function ChatInterface() {
 
         <div className="soft-divider border-t px-4 py-4 sm:px-6">
           <form onSubmit={handleSubmit} className="mx-auto max-w-4xl">
-            <div className="rounded-[24px] border border-white/10 bg-slate-950/70 p-2 shadow-[0_20px_60px_rgba(2,6,23,0.45)]">
-              <div className="flex items-end gap-2">
+            <div className="rounded-[22px] border border-slate-200 bg-white px-3 py-2 shadow-[0_10px_30px_rgba(148,163,184,0.14)]">
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setShowFileUpload(!showFileUpload)}
-                  className="mb-1 rounded-2xl p-3 text-slate-400 transition-colors hover:bg-white/5 hover:text-slate-100"
+                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
                   aria-label={showFileUpload ? 'Hide file upload' : 'Show file upload'}
                 >
-                  <Paperclip className="h-5 w-5" />
+                  {showFileUpload ? <Paperclip className="h-[18px] w-[18px]" /> : <Plus className="h-[18px] w-[18px]" />}
                 </button>
 
-                <div className="flex-1">
+                <div className="flex min-h-[40px] flex-1 min-w-0 items-center">
                   <textarea
                     ref={inputRef}
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={handleKeyDown}
-                    placeholder="Ask about a policy, summarize a document, or upload files for review..."
-                    className="max-h-40 min-h-[56px] w-full resize-none bg-transparent px-2 py-3 text-[15px] text-slate-100 outline-none placeholder:text-slate-500"
+                    placeholder="Ask me anything about your loan..."
+                    className="max-h-40 w-full resize-none bg-transparent px-1 py-0 text-[15px] leading-[24px] text-slate-900 outline-none placeholder:text-slate-400"
                     rows={1}
                     disabled={isLoading}
                   />
-                  <div className="flex items-center justify-between px-2 pb-2">
-                    <p className="text-xs text-slate-500">
-                      Press Enter to send. Shift+Enter for a new line.
-                    </p>
-                    <button
-                      type="submit"
-                      disabled={isLoading || (!input.trim() && pendingFiles.length === 0)}
-                      className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-teal-300 text-slate-950 transition hover:bg-teal-200 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500"
-                      aria-label="Send message"
-                    >
-                      {isLoading ? (
-                        <Loader2 className="h-5 w-5 animate-spin" />
-                      ) : (
-                        <ArrowUp className="h-5 w-5" />
-                      )}
-                    </button>
-                  </div>
                 </div>
+
+                <button
+                  type="submit"
+                  disabled={isLoading || (!input.trim() && pendingFiles.length === 0)}
+                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[16px] bg-gradient-to-br from-blue-600 to-sky-500 text-white transition hover:from-blue-700 hover:to-sky-600 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+                  aria-label="Send message"
+                >
+                  {isLoading ? (
+                    <Loader2 className="h-[18px] w-[18px] animate-spin" />
+                  ) : (
+                    <ArrowUp className="h-[18px] w-[18px]" />
+                  )}
+                </button>
               </div>
             </div>
           </form>
