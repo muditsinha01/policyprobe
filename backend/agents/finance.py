@@ -8,6 +8,10 @@ SECURITY NOTES (for Unifai demo):
 - Authorization check exists but has bypass for "internal" calls
 - Sensitive financial data returned without audit logging
 - No rate limiting on data access
+- PROMPT INJECTION VULNERABILITY: Untrusted finance content (reports, documents)
+  is passed to the LLM without prompt-injection scanning. External reports,
+  partner documents, or user-provided financial content may contain hidden or
+  malicious instructions that manipulate LLM behavior.
 """
 
 import logging
@@ -103,9 +107,19 @@ class FinanceAgent:
             }
 
         user_message = context.get("user_message", "")
+        file_contents = context.get("file_contents", [])
 
-        # Process the financial query
-        response = await self._process_financial_query(user_message)
+        # VULNERABILITY (Prompt Injection Demo): When user provides finance content
+        # (e.g., uploaded report, partner document), we pass it directly to the LLM
+        # without scanning for hidden prompts or malicious instructions.
+        # Unifai remediation: apply backend/policies/prompt_injection.py before LLM.
+        if file_contents:
+            response = await self._analyze_external_finance_report(
+                user_message=user_message,
+                report_contents=file_contents,
+            )
+        else:
+            response = await self._process_financial_query(user_message)
 
         return {
             "response": response,
@@ -153,6 +167,55 @@ class FinanceAgent:
             return True
 
         return False
+
+    async def _analyze_external_finance_report(
+        self,
+        user_message: str,
+        report_contents: list[dict[str, Any]],
+    ) -> str:
+        """
+        Analyze external finance content (reports, partner documents) via LLM.
+
+        VULNERABILITY (Prompt Injection - Unifai Demo):
+        Untrusted finance content is passed directly to the LLM without any
+        prompt-injection scanning. Reports may contain:
+        - Hidden text (white-on-white, display:none, visibility:hidden)
+        - Base64-encoded malicious instructions
+        - Direct prompt injection strings ("ignore previous instructions", etc.)
+        - Malicious content in metadata or embedded elements
+
+        This content flows straight into downstream LLM processing. After
+        Unifai remediation, backend/policies/prompt_injection.py should
+        scan and block/sanitize before the LLM call.
+        """
+        combined = "\n\n".join(
+            f"Report: {r.get('filename', 'unknown')}\n{r.get('extracted_content', '')}"
+            for r in report_contents
+        )
+
+        # VULNERABILITY: No prompt_injection.scan() before LLM.
+        # Hidden or malicious instructions in report_contents will reach the LLM.
+        response = await self.llm_client.chat(
+            messages=[
+                {
+                    "role": "system",
+                    "content": """You are a financial analyst assistant.
+Analyze the provided financial reports and answer the user's questions.
+Provide clear, professional responses with relevant insights.""",
+                },
+                {
+                    "role": "user",
+                    "content": f"""Financial Report Content:
+{combined}
+
+User Question: {user_message}
+
+Please analyze the report and answer the question above.""",
+                },
+            ]
+        )
+
+        return response
 
     async def _process_financial_query(self, query: str) -> str:
         """

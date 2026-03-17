@@ -16,7 +16,7 @@ PolicyProbe is a deliberately vulnerable chat agent application designed to demo
 | Policy | Vulnerability | After Remediation |
 |--------|---------------|-------------------|
 | **PII Detection** | Files processed without PII scanning | SSN, credit cards, phone numbers detected and blocked |
-| **Prompt Injection** | Hidden text/prompts sent to LLM | Hidden content detected and filtered |
+| **Prompt Injection** | Finance agent passes untrusted report content to LLM without scanning | Hidden content detected and filtered |
 | **Agent Auth** | Inter-agent calls bypass authentication | JWT-based authentication required |
 | **Vulnerable Deps** | Old packages with known CVEs | Updated to patched versions |
 
@@ -92,7 +92,8 @@ policyprobe/
 │   ├── agents/                  # Multi-agent system
 │   │   ├── orchestrator.py      # Request routing
 │   │   ├── tech_support.py      # Low privilege agent
-│   │   ├── finance.py           # High privilege agent
+│   │   ├── finance.py           # High privilege agent ⚠️ Prompt injection (untrusted report content)
+│   │   ├── file_processor.py    # File processing ⚠️ PII in uploaded files
 │   │   └── auth/                # ⚠️ Auth bypass
 │   ├── policies/                # Policy modules
 │   │   ├── pii_detection.py     # ⚠️ NO-OP detection
@@ -122,13 +123,14 @@ policyprobe/
 ### 2. Prompt Injection Demo
 
 **Before:**
-1. Upload `test_files/advanced/base64_hidden.html`
-2. Hidden prompts are extracted and sent to LLM
-3. LLM may respond to malicious instructions
+1. Upload `test_files/advanced/finance_report_hidden.html` and ask: "Analyze this financial report"
+2. Request routes to the finance agent
+3. Untrusted report content (including hidden prompts) is passed to the LLM without scanning
+4. LLM may respond to malicious instructions
 
 **After Unifai Remediation:**
-1. Upload the same file
-2. Observe: "Security threat detected: Hidden content in HTML elements"
+1. Upload the same file and ask the same question
+2. Observe: "Security threat detected: Hidden content in HTML elements" (or similar block from `backend/policies/prompt_injection.py`)
 
 ### 3. Agent Authentication Demo
 
@@ -158,7 +160,7 @@ cd frontend && npm audit
 | Policy Category | Individual Policy | Violation File (Unifai Scans) | Guardrail File (Unifai Applies) |
 |-----------------|-------------------|-------------------------------|--------------------------------|
 | **Data Security** | PII in uploaded files | `backend/agents/file_processor.py` | `backend/policies/pii_detection.py` |
-| **AI Threats** | Hidden prompts / Prompt injection | `backend/agents/file_processor.py` | `backend/policies/prompt_injection.py` |
+| **AI Threats** | Hidden prompts / Prompt injection | `backend/agents/finance.py` | `backend/policies/prompt_injection.py` |
 | **Identity & Access** | Unauthenticated agent calls | `backend/agents/orchestrator.py` | `backend/agents/auth/agent_auth.py` |
 | **Vulnerability** | Vulnerable npm packages | `frontend/package.json` | *(version update)* |
 | **Vulnerability** | Vulnerable Python packages | `backend/requirements.txt` | *(version update)* |
@@ -166,8 +168,9 @@ cd frontend && npm audit
 ## Test Files
 
 - `test_files/simple/` - Basic examples for warm-up
-- `test_files/advanced/nested_pii.json` - PII buried 5 levels deep
-- `test_files/advanced/base64_hidden.html` - Hidden prompts in HTML
+- `test_files/advanced/nested_pii.json` - PII buried 5 levels deep (PII demo)
+- `test_files/advanced/finance_report_hidden.html` - Financial report with hidden prompts (Prompt Injection demo)
+- `test_files/advanced/base64_hidden.html` - Hidden prompts in HTML (legacy)
 - `test_files/advanced/multi_hop_attack.json` - Chained agent exploit
 
 Generate additional test files:
