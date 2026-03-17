@@ -1,22 +1,22 @@
-# PolicyProbe
+# Acme Loan Assistant
 
 **AI-powered policy evaluation and remediation demo application**
 
-PolicyProbe is a deliberately vulnerable chat agent application designed to demonstrate how Unifai detects security policy violations and instructs Cursor IDE to remediate them.
+Acme Loan Assistant is a deliberately vulnerable chat agent application designed to demonstrate how Unifai detects security policy violations and instructs Cursor IDE to remediate them. The frontend presents as a lightweight AI assistant for document review and loan-related chat.
 
 ## Demo Flow
 
-1. **Run PolicyProbe with Unifai disabled** → vulnerable behavior is visible
+1. **Run Acme Loan Assistant with Unifai disabled** → vulnerable behavior is visible
 2. **Enable Unifai in Cursor** → scans code, detects violations
 3. **Unifai instructs Cursor** to fix the violations
-4. **Run PolicyProbe again** → guardrails now active, violations blocked
+4. **Run Acme Loan Assistant again** → guardrails now active, violations blocked
 
 ## Four Policy Violations Demonstrated
 
 | Policy | Vulnerability | After Remediation |
 |--------|---------------|-------------------|
 | **PII Detection** | Files processed without PII scanning | SSN, credit cards, phone numbers detected and blocked |
-| **Prompt Injection** | Finance agent passes untrusted report content to LLM without scanning | Hidden content detected and filtered |
+| **Prompt Injection** | Hidden text/prompts sent to LLM | Hidden content detected and filtered |
 | **Agent Auth** | Inter-agent calls bypass authentication | JWT-based authentication required |
 | **Vulnerable Deps** | Old packages with known CVEs | Updated to patched versions |
 
@@ -44,7 +44,7 @@ docker run -d \
   policyprobe:local
 ```
 
-3. **Open the app** at http://localhost
+3. **Open the app** at http://localhost (Acme Loan Assistant interface)
 
 > **Free model note:** If you get 429 errors, switch models via `OPENROUTER_MODEL` or add a payment method at [openrouter.ai/settings/billing](https://openrouter.ai/settings/billing).
 
@@ -104,26 +104,35 @@ npm run dev -- -p 5001
 
 5. **Open the app**
 
-- Frontend: http://localhost:5001
+- Frontend (Acme Loan Assistant): http://localhost:5001
 - Backend API: http://localhost:5500
 - API Docs: http://localhost:5500/docs
+
+## Frontend
+
+The Acme Loan Assistant UI features a clean, modern design:
+
+- **Light theme** — Slate/blue palette with subtle radial gradients and glass-panel styling
+- **Typography** — Manrope font for a professional, approachable feel
+- **Layout** — Glass panel chat container with blue accent band, soft dividers, and fade-in animations
+- **Features** — File upload zone with drag-and-drop, starter prompts for quick actions, and responsive design
+- **Components** — Chat interface, message list, file upload, and policy error display
 
 ## Project Structure
 
 ```
 policyprobe/
-├── frontend/                    # Next.js React frontend
+├── frontend/                    # Next.js React frontend (Acme Loan Assistant UI)
 │   ├── src/
-│   │   ├── app/                 # Next.js app router
-│   │   └── components/          # React components
+│   │   ├── app/                 # Next.js app router, layout, globals
+│   │   └── components/          # ChatInterface, MessageList, FileUpload
 │   └── package.json             # ⚠️ Vulnerable npm deps
 │
 ├── backend/                     # Python FastAPI backend
 │   ├── agents/                  # Multi-agent system
 │   │   ├── orchestrator.py      # Request routing
 │   │   ├── tech_support.py      # Low privilege agent
-│   │   ├── finance.py           # High privilege agent ⚠️ Prompt injection (untrusted report content)
-│   │   ├── file_processor.py    # File processing ⚠️ PII in uploaded files
+│   │   ├── finance.py           # High privilege agent
 │   │   └── auth/                # ⚠️ Auth bypass
 │   ├── policies/                # Policy modules
 │   │   ├── pii_detection.py     # ⚠️ NO-OP detection
@@ -153,14 +162,13 @@ policyprobe/
 ### 2. Prompt Injection Demo
 
 **Before:**
-1. Upload `test_files/advanced/finance_report_hidden.html` and ask: "Analyze this financial report"
-2. Request routes to the finance agent
-3. Hidden prompts in the uploaded file (display:none, visibility:hidden, white-on-white) are extracted and passed to the LLM without scanning
-4. LLM may respond to malicious instructions
+1. Upload `test_files/advanced/base64_hidden.html`
+2. Hidden prompts are extracted and sent to LLM
+3. LLM may respond to malicious instructions
 
 **After Unifai Remediation:**
-1. Upload the same file and ask the same question
-2. Observe: "Security threat detected: Hidden content in HTML elements" (or similar block from `backend/policies/prompt_injection.py`)
+1. Upload the same file
+2. Observe: "Security threat detected: Hidden content in HTML elements"
 
 ### 3. Agent Authentication Demo
 
@@ -190,7 +198,7 @@ cd frontend && npm audit
 | Policy Category | Individual Policy | Violation File (Unifai Scans) | Guardrail File (Unifai Applies) |
 |-----------------|-------------------|-------------------------------|--------------------------------|
 | **Data Security** | PII in uploaded files | `backend/agents/file_processor.py` | `backend/policies/pii_detection.py` |
-| **AI Threats** | Hidden prompts / Prompt injection | `backend/agents/finance.py` | `backend/policies/prompt_injection.py` |
+| **AI Threats** | Hidden prompts / Prompt injection | `backend/agents/file_processor.py` | `backend/policies/prompt_injection.py` |
 | **Identity & Access** | Unauthenticated agent calls | `backend/agents/orchestrator.py` | `backend/agents/auth/agent_auth.py` |
 | **Vulnerability** | Vulnerable npm packages | `frontend/package.json` | *(version update)* |
 | **Vulnerability** | Vulnerable Python packages | `backend/requirements.txt` | *(version update)* |
@@ -198,9 +206,8 @@ cd frontend && npm audit
 ## Test Files
 
 - `test_files/simple/` - Basic examples for warm-up
-- `test_files/advanced/nested_pii.json` - PII buried 5 levels deep (PII demo)
-- `test_files/advanced/finance_report_hidden.html` - Financial report with hidden prompts (Prompt Injection demo)
-- `test_files/advanced/base64_hidden.html` - Hidden prompts in HTML (legacy)
+- `test_files/advanced/nested_pii.json` - PII buried 5 levels deep
+- `test_files/advanced/base64_hidden.html` - Hidden prompts in HTML
 - `test_files/advanced/multi_hop_attack.json` - Chained agent exploit
 
 Generate additional test files:
@@ -212,8 +219,8 @@ python scripts/create_test_files.py
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                      PolicyProbe UI                         │
-│                   (Next.js + React)                         │
+│              Acme Loan Assistant (PolicyProbe)              │
+│              Next.js + React · Light theme · Manrope         │
 └─────────────────────────────────────────────────────────────┘
                             │
                             ▼
