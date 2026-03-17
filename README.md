@@ -1,15 +1,15 @@
-# PolicyProbe
+# Acme Loan Assistant
 
 **AI-powered policy evaluation and remediation demo application**
 
-PolicyProbe is a deliberately vulnerable chat agent application designed to demonstrate how Unifai detects security policy violations and instructs Cursor IDE to remediate them.
+Acme Loan Assistant is a deliberately vulnerable chat agent application designed to demonstrate how Unifai detects security policy violations and instructs Cursor IDE to remediate them. The frontend presents as a lightweight AI assistant for document review and loan-related chat.
 
 ## Demo Flow
 
-1. **Run PolicyProbe with Unifai disabled** → vulnerable behavior is visible
+1. **Run Acme Loan Assistant with Unifai disabled** → vulnerable behavior is visible
 2. **Enable Unifai in Cursor** → scans code, detects violations
 3. **Unifai instructs Cursor** to fix the violations
-4. **Run PolicyProbe again** → guardrails now active, violations blocked
+4. **Run Acme Loan Assistant again** → guardrails now active, violations blocked
 
 ## Four Policy Violations Demonstrated
 
@@ -44,7 +44,7 @@ docker run -d \
   policyprobe:local
 ```
 
-3. **Open the app** at http://localhost
+3. **Open the app** at http://localhost (Acme Loan Assistant interface)
 
 > **Free model note:** If you get 429 errors, switch models via `OPENROUTER_MODEL` or add a payment method at [openrouter.ai/settings/billing](https://openrouter.ai/settings/billing).
 
@@ -104,18 +104,28 @@ npm run dev -- -p 5001
 
 5. **Open the app**
 
-- Frontend: http://localhost:5001
+- Frontend (Acme Loan Assistant): http://localhost:5001
 - Backend API: http://localhost:5500
 - API Docs: http://localhost:5500/docs
+
+## Frontend
+
+The Acme Loan Assistant UI features a clean, modern design:
+
+- **Light theme** — Slate/blue palette with subtle radial gradients and glass-panel styling
+- **Typography** — Manrope font for a professional, approachable feel
+- **Layout** — Glass panel chat container with blue accent band, soft dividers, and fade-in animations
+- **Features** — File upload zone with drag-and-drop, starter prompts for quick actions, and responsive design
+- **Components** — Chat interface, message list, file upload, and policy error display
 
 ## Project Structure
 
 ```
 policyprobe/
-├── frontend/                    # Next.js React frontend
+├── frontend/                    # Next.js React frontend (Acme Loan Assistant UI)
 │   ├── src/
-│   │   ├── app/                 # Next.js app router
-│   │   └── components/          # React components
+│   │   ├── app/                 # Next.js app router, layout, globals
+│   │   └── components/          # ChatInterface, MessageList, FileUpload
 │   └── package.json             # ⚠️ Vulnerable npm deps
 │
 ├── backend/                     # Python FastAPI backend
@@ -209,8 +219,8 @@ python scripts/create_test_files.py
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                      PolicyProbe UI                         │
-│                   (Next.js + React)                         │
+│              Acme Loan Assistant (PolicyProbe)              │
+│              Next.js + React · Light theme · Manrope         │
 └─────────────────────────────────────────────────────────────┘
                             │
                             ▼
