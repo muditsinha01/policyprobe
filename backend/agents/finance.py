@@ -3,20 +3,97 @@ Finance Agent
 
 Handles financial data queries with HIGH privilege level.
 Should only be accessible to authorized callers.
-
-SECURITY NOTES (for Unifai demo):
-- Authorization check exists but has bypass for "internal" calls
-- Sensitive financial data returned without audit logging
-- No rate limiting on data access
 """
 
+import base64
+import hashlib
+import hmac
 import logging
+import re
+import time
 from typing import Any, Optional
 
 from .auth.agent_auth import AgentIdentity, AgentAuthenticator
 from llm.openrouter import OpenRouterClient
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# PII patterns (Singapore + general)
+# ---------------------------------------------------------------------------
+_PII_PATTERNS: dict[str, re.Pattern] = {
+    "SSN": re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),
+    "NRIC": re.compile(r"\b[STFGM]\d{7}[A-Z]\b", re.IGNORECASE),
+    "FIN": re.compile(r"\b[FGM]\d{7}[A-Z]\b", re.IGNORECASE),
+    "Passport Number": re.compile(r"\b[A-Z]{1,2}\d{6,9}\b"),
+    "Credit Card Number": re.compile(r"\b(?:\d[ -]*?){13,19}\b"),
+    "Email": re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b"),
+    "Phone Number": re.compile(
+        r"\b(?:\+?\d{1,3}[-.\s]?)?\(?\d{2,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{4}\b"
+    ),
+    "IP Address": re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b"),
+    "MAC Address": re.compile(r"\b(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\b"),
+    "Date of Birth": re.compile(
+        r"\b(?:DOB|Date of Birth|D\.O\.B\.?)\s*[:\-]?\s*\d{1,4}[/\-\.]\d{1,2}[/\-\.]\d{1,4}\b",
+        re.IGNORECASE,
+    ),
+    "Bank Account Number": re.compile(r"\b\d{8,17}\b"),
+    "Driver License": re.compile(r"\b[A-Z]\d{7,14}\b"),
+    "GPS Coordinates": re.compile(r"-?\d{1,3}\.\d{4,},\s*-?\d{1,3}\.\d{4,}"),
+    "Vehicle VIN": re.compile(r"\b[A-HJ-NPR-Z0-9]{17}\b"),
+    "IMEI": re.compile(r"\b\d{15}\b"),
+    "CPF Account Number": re.compile(r"\b[A-Z]{2}\d{7}[A-Z]\b", re.IGNORECASE),
+    "Tax ID": re.compile(r"\b\d{2}-\d{7}\b"),
+}
+
+
+def _redact_pii(text: str) -> str:
+    """Replace PII matches with REDACTED."""
+    for _label, pattern in _PII_PATTERNS.items():
+        text = pattern.sub("REDACTED", text)
+    return text
+
+
+# ---------------------------------------------------------------------------
+# Suspicious-prompt / command scanner for uploaded file content
+# ---------------------------------------------------------------------------
+_SUSPICIOUS_COMMANDS = re.compile(
+    r"\b(?:alias|ripgrep|curl|rm|echo|dd|git|tar|chmod|chown|fsck|eval|exec|subprocess"
+    r"|sh\b|bash|wget|nc\b|netcat|python|ruby|perl|nmap|sudo|kill|mkfs)\b"
+    r"|`[^`]+`"
+    r"|\$\([^)]+\)",
+    re.IGNORECASE,
+)
+
+_BASE64_CHUNK = re.compile(r"[A-Za-z0-9+/]{20,}={0,2}")
+
+
+def _strip_suspicious_content(text: str) -> str:
+    """Remove shell commands, executables, and base64-encoded suspicious payloads."""
+    for match in _BASE64_CHUNK.finditer(text):
+        try:
+            decoded = base64.b64decode(match.group()).decode("utf-8", errors="ignore")
+            if _SUSPICIOUS_COMMANDS.search(decoded):
+                text = text.replace(match.group(), "<suspicious_content_removed>")
+        except Exception:
+            pass
+    text = _SUSPICIOUS_COMMANDS.sub("<suspicious_content_removed>", text)
+    return text
+
+
+# ---------------------------------------------------------------------------
+# LLM output sanitizer – strips eval / dynamic-code-execution lines
+# ---------------------------------------------------------------------------
+_CODE_EXEC_LINE = re.compile(
+    r"^.*\b(?:eval|exec|subprocess\s*\(.*shell\s*=\s*True|os\.system|os\.popen"
+    r"|child_process|Function\s*\(|new\s+Function)\b.*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
+def _sanitize_llm_output(text: str) -> str:
+    """Remove lines containing eval / dynamic-code-execution primitives."""
+    return _CODE_EXEC_LINE.sub("", text)
 
 
 class FinanceAgent:
@@ -86,8 +163,6 @@ class FinanceAgent:
         Returns:
             Response dictionary with financial data or error
         """
-        # Authorization check
-        # VULNERABILITY: Check exists but has bypass
         if not self._verify_authorization(caller, headers):
             logger.warning(
                 "Unauthorized access attempt to finance agent",
@@ -103,9 +178,15 @@ class FinanceAgent:
             }
 
         user_message = context.get("user_message", "")
+        file_contents = context.get("file_contents", [])
 
-        # Process the financial query
-        response = await self._process_financial_query(user_message)
+        if file_contents:
+            response = await self._analyze_external_finance_report(
+                user_message=user_message,
+                report_contents=file_contents,
+            )
+        else:
+            response = await self._process_financial_query(user_message)
 
         return {
             "response": response,
@@ -118,52 +199,85 @@ class FinanceAgent:
         caller: AgentIdentity,
         headers: Optional[dict]
     ) -> bool:
-        """
-        Verify that the caller is authorized to access financial data.
-
-        VULNERABILITY: The is_internal flag bypasses all privilege checks.
-        Any agent claiming to be "internal" can access financial data.
-        """
-        # Check 1: Role-based access
+        """Verify that the caller is authorized to access financial data."""
         if caller.privilege_level in self.ALLOWED_ROLES:
             return True
 
-        # Check 2: Admin override
         if caller.privilege_level == "admin":
             return True
 
-        # VULNERABILITY: Internal bypass - any agent claiming internal status
-        # gets full access without verification
-        if caller.is_internal:
-            logger.info(
-                "Internal caller accessing finance agent",
-                extra={
-                    "caller": caller.agent_id,
-                    "note": "Internal bypass used"
-                }
-            )
-            return True  # Bypass for "internal" calls
-
-        # Check 3: Token verification (but token is never actually validated!)
-        # VULNERABILITY: We check if token exists but never validate it
-        if headers and headers.get("X-Agent-Token"):
-            # Token exists, but we don't verify its validity
-            # This is a security vulnerability - any token passes
-            logger.debug("Token provided, granting access")
+        token = (headers or {}).get("X-Agent-Token", "")
+        if token and self._validate_agent_token(token, caller.agent_id, self.agent_id):
             return True
 
         return False
 
-    async def _process_financial_query(self, query: str) -> str:
-        """
-        Process a financial query and return relevant data.
+    @staticmethod
+    def _validate_agent_token(token: str, expected_caller: str, expected_target: str) -> bool:
+        """Validate an HMAC inter-agent token (caller, target, expiry)."""
+        import os
+        secret = os.environ.get("AGENT_SECRET", "")
+        if not secret:
+            return False
+        try:
+            parts = token.rsplit(":", 1)
+            if len(parts) != 2:
+                return False
+            payload, signature = parts
+            expected_sig = hmac.new(
+                secret.encode(), payload.encode(), hashlib.sha256
+            ).hexdigest()
+            if not hmac.compare_digest(signature, expected_sig):
+                return False
+            caller_id, target_id, ts = payload.split(":")
+            if caller_id != expected_caller or target_id != expected_target:
+                return False
+            if abs(time.time() - int(ts)) > 300:
+                return False
+            return True
+        except Exception:
+            return False
 
-        VULNERABILITY: Sensitive financial data returned without
-        proper audit logging or data masking.
-        """
+    async def _analyze_external_finance_report(
+        self,
+        user_message: str,
+        report_contents: list[dict[str, Any]],
+    ) -> str:
+        """Analyze external finance content (reports, partner documents) via LLM."""
+        combined = "\n\n".join(
+            f"Report: {r.get('filename', 'unknown')}\n{r.get('extracted_content', '')}"
+            for r in report_contents
+        )
+
+        combined = _redact_pii(combined)
+        combined = _strip_suspicious_content(combined)
+
+        response = await self.llm_client.chat(
+            messages=[
+                {
+                    "role": "system",
+                    "content": """You are a financial analyst assistant.
+Analyze the provided financial reports and answer the user's questions.
+Provide clear, professional responses with relevant insights.""",
+                },
+                {
+                    "role": "user",
+                    "content": f"""Financial Report Content:
+{combined}
+
+User Question: {user_message}
+
+Please analyze the report and answer the question above.""",
+                },
+            ]
+        )
+
+        return _sanitize_llm_output(response)
+
+    async def _process_financial_query(self, query: str) -> str:
+        """Process a financial query and return relevant data."""
         query_lower = query.lower()
 
-        # Determine what data to include
         data_to_include = []
 
         if "revenue" in query_lower or "quarterly" in query_lower:
@@ -177,27 +291,22 @@ class FinanceAgent:
             )
 
         if "salary" in query_lower or "payroll" in query_lower:
-            # VULNERABILITY: Salary data returned without masking
             data_to_include.append(
                 f"Department Salaries:\n{self._format_dict(self._financial_data['employee_salaries'])}"
             )
 
         if "projection" in query_lower or "forecast" in query_lower or "plan" in query_lower:
-            # VULNERABILITY: Highly sensitive strategic data exposed
             data_to_include.append(
                 f"Strategic Projections (CONFIDENTIAL):\n{self._format_dict(self._financial_data['sensitive_projections'])}"
             )
 
         if not data_to_include:
-            # Default response with general financial overview
             data_to_include.append(
                 f"Financial Overview:\nRevenue: {self._format_dict(self._financial_data['quarterly_revenue'])}"
             )
 
         financial_context = "\n\n".join(data_to_include)
 
-        # Use LLM to generate a natural response
-        # VULNERABILITY: Sensitive financial data sent to external LLM
         response = await self.llm_client.chat(
             messages=[
                 {
@@ -213,7 +322,7 @@ Format numbers clearly and provide relevant insights."""
             ]
         )
 
-        return response
+        return _sanitize_llm_output(response)
 
     def _format_dict(self, data: dict) -> str:
         """Format dictionary data for display."""
@@ -222,24 +331,13 @@ Format numbers clearly and provide relevant insights."""
     async def get_financial_data(
         self,
         requester: AgentIdentity,
-        query: str
+        query: str,
+        headers: Optional[dict] = None,
     ) -> dict[str, Any]:
-        """
-        Direct method to get financial data.
-
-        VULNERABILITY: Authorization check has internal bypass.
-        Used by other agents to access financial data directly.
-        """
-        # Authorization check with bypass
-        if requester.privilege_level in self.ALLOWED_ROLES:
-            pass  # Authorized
-        elif requester.is_internal:
-            # VULNERABILITY: is_internal always True for agent calls
-            pass  # Bypassed
-        else:
+        """Direct method to get financial data with auth check."""
+        if not self._verify_authorization(requester, headers):
             return {"error": "Unauthorized"}
 
-        # VULNERABILITY: Full financial data access without granular permissions
         return {
             "data": self._financial_data,
             "query": query,
