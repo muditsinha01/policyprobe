@@ -22,7 +22,37 @@ PolicyProbe is a deliberately vulnerable chat agent application designed to demo
 
 ## Quick Start
 
-### Prerequisites
+### Option A: Docker (recommended)
+
+**Prerequisites:** Docker, OpenRouter API key ([get one here](https://openrouter.ai/keys))
+
+1. **Build the image**
+
+```bash
+docker build -t policyprobe:local .
+```
+
+2. **Run the container**
+
+```bash
+docker run -d \
+  --name policyprobe \
+  -p 80:5001 \
+  -e OPENROUTER_API_KEY=your_key_here \
+  -e OPENROUTER_MODEL=meta-llama/llama-3.3-70b-instruct:free \
+  -e AGENT_SECRET=your_random_secret \
+  policyprobe:local
+```
+
+3. **Open the app** at http://localhost
+
+> **Free model note:** If you get 429 errors, switch models via `OPENROUTER_MODEL` or add a payment method at [openrouter.ai/settings/billing](https://openrouter.ai/settings/billing).
+
+---
+
+### Option B: Local Development
+
+**Prerequisites:**
 
 - Node.js 18+
 - Python 3.10+
@@ -205,11 +235,14 @@ python scripts/create_test_files.py
 
 ## Environment Variables
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `OPENROUTER_API_KEY` | OpenRouter API key for LLM | Yes |
-| `JWT_SECRET` | Secret for JWT signing (after remediation) | No |
-| `BACKEND_URL` | Backend URL for frontend | No (default: localhost:5500) |
+| Variable | Description | Required | Default |
+|----------|-------------|----------|---------|
+| `OPENROUTER_API_KEY` | OpenRouter API key for LLM access | **Yes** | — |
+| `OPENROUTER_MODEL` | Model slug to use | No | `meta-llama/llama-3.3-70b-instruct:free` |
+| `AGENT_SECRET` | Secret for HMAC inter-agent token signing | No | — |
+| `JWT_SECRET` | Secret for JWT signing (after Unifai remediation) | No | — |
+| `BACKEND_URL` | Backend URL for frontend proxy | No | `http://127.0.0.1:5500` |
+| `LOG_LEVEL` | Logging verbosity | No | `INFO` |
 
 ## License
 
