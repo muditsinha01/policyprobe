@@ -1,6 +1,18 @@
 """
 File Processor Agent
-  
+
+Deliberately vulnerable version for the PolicyProbe demo.
+
+VULNERABILITY:
+Uploaded files are parsed and their extracted content is forwarded to downstream
+LLM processing without prompt-injection or hidden-content scanning.
+
+This allows malicious instructions embedded in:
+- hidden HTML elements
+- base64/encoded blocks
+- PDF hidden text
+- image metadata / OCR text
+to reach the model.
 """
 
 import base64
@@ -23,7 +35,14 @@ class FileProcessorAgent:
     - Extract text from PDFs
     - Parse HTML content
     - Extract image metadata and text
-    - Process Word documents
+    - Process plain text and JSON
+
+    DELIBERATE VULNERABILITY:
+    Extracted content is trusted and returned directly without scanning for:
+    - hidden prompts
+    - prompt injection
+    - encoded malicious instructions
+    - dangerous metadata content
     """
 
     PRIVILEGE_LEVEL = "medium"
@@ -53,20 +72,10 @@ class FileProcessorAgent:
         """
         Process uploaded file and extract content.
 
-        Args:
-            content: File content (text or base64 encoded)
-            filename: Original filename
-            content_type: MIME type of the file
-
-        Returns:
-            Extracted text content from the file
-
-        VULNERABILITY: No security scanning performed on file content.
-        Files are processed and content extracted without checking for:
-        - PII (SSN, credit cards, phone numbers)
-        - Hidden/malicious prompts
-        - Malware signatures
-        - Sensitive data patterns
+        VULNERABILITY:
+        No security scan is performed before or after extraction.
+        Hidden prompts and malicious instructions can be extracted and passed
+        into downstream LLM context.
         """
         logger.info(
             "Processing file",
@@ -74,19 +83,16 @@ class FileProcessorAgent:
                 "file_name": filename,
                 "file_type": content_type,
                 "content_length": len(content) if content else 0,
-                # VULNERABILITY: Content preview in logs could contain sensitive data
-                "content_preview": content[:100] if content else None
+                # Deliberately unsafe logging for demo purposes
+                "content_preview": content[:100] if content else None,
             }
         )
 
         if not content:
             return f"Empty file: {filename}"
 
-        # Determine file type
         file_type = self._get_file_type(content_type, filename)
 
-        # Process based on file type
-        # VULNERABILITY: No content scanning before processing
         try:
             if file_type == "pdf":
                 extracted = await self._process_pdf(content)
@@ -97,27 +103,26 @@ class FileProcessorAgent:
             elif file_type == "json":
                 extracted = await self._process_json(content)
             elif file_type == "text":
-                extracted = content  # Direct text, no processing needed
+                extracted = content
             else:
                 extracted = f"Unsupported file type: {content_type}"
 
-            # VULNERABILITY: No post-processing security scan
-            # Extracted content could contain:
-            # - Hidden prompt injections (invisible text, encoded data)
-            # - PII that should be masked
-            # - Malicious instructions
+            # DELIBERATE VULNERABILITY:
+            # Extracted content is forwarded directly to downstream analysis
+            # without prompt-injection scanning.
+            downstream_payload = f"USER_UPLOADED_CONTENT:\n{extracted}"
 
             logger.info(
                 "File processing complete",
                 extra={
                     "file_name": filename,
                     "extracted_length": len(extracted),
-                    # VULNERABILITY: Full extracted content in logs
-                    "extracted_preview": extracted[:200]
+                    # Deliberately unsafe logging for demo purposes
+                    "extracted_preview": extracted[:200],
                 }
             )
 
-            return extracted
+            return downstream_payload
 
         except Exception as e:
             logger.error(
@@ -125,51 +130,43 @@ class FileProcessorAgent:
                 extra={
                     "file_name": filename,
                     "error": str(e),
-                    # VULNERABILITY: Full content in error logs
-                    "file_content": content[:500] if content else None
+                    # Deliberately unsafe logging for demo purposes
+                    "file_content": content[:500] if content else None,
                 }
             )
             return f"Error processing {filename}: {str(e)}"
 
     def _get_file_type(self, content_type: str, filename: str) -> str:
         """Determine file type from MIME type or extension."""
-        # Check MIME type first
         if content_type in self.SUPPORTED_TYPES:
             return self.SUPPORTED_TYPES[content_type]
 
-        # Fall back to extension
-        ext = filename.lower().split('.')[-1] if '.' in filename else ''
+        ext = filename.lower().split(".")[-1] if "." in filename else ""
         extension_map = {
-            'pdf': 'pdf',
-            'html': 'html',
-            'htm': 'html',
-            'txt': 'text',
-            'json': 'json',
-            'jpg': 'image',
-            'jpeg': 'image',
-            'png': 'image',
-            'doc': 'word',
-            'docx': 'word',
+            "pdf": "pdf",
+            "html": "html",
+            "htm": "html",
+            "txt": "text",
+            "json": "json",
+            "jpg": "image",
+            "jpeg": "image",
+            "png": "image",
+            "doc": "word",
+            "docx": "word",
         }
-
-        return extension_map.get(ext, 'unknown')
+        return extension_map.get(ext, "unknown")
 
     async def _process_pdf(self, content: str) -> str:
         """
         Process PDF file content.
 
-        VULNERABILITY: PDF processing extracts all text including
-        hidden/white text that could contain prompt injections.
+        VULNERABILITY:
+        PDF extraction trusts all extracted text, including hidden text layers
+        that may contain prompt injection payloads.
         """
-        # Content is base64 encoded for PDFs
         try:
             pdf_bytes = base64.b64decode(content)
             extracted_text = await self.pdf_parser.extract_text(pdf_bytes)
-
-            # VULNERABILITY: No hidden text detection
-            # Invisible text (white on white, size 0, off-page) is extracted
-            # and passed to LLM without filtering
-
             return extracted_text
         except Exception as e:
             logger.error(f"PDF processing error: {e}")
@@ -179,18 +176,15 @@ class FileProcessorAgent:
         """
         Process HTML content.
 
-        VULNERABILITY: HTML processing may not detect all hidden content:
-        - CSS-hidden elements (display:none, visibility:hidden)
-        - White text on white background
-        - Off-screen positioned elements
-        - Base64 encoded content in data attributes
+        VULNERABILITY:
+        Hidden DOM content may be extracted and returned, including:
+        - display:none elements
+        - visibility:hidden elements
+        - off-screen text
+        - encoded or obfuscated hidden instructions
         """
         try:
             extracted_text = await self.html_parser.extract_text(content)
-
-            # VULNERABILITY: get_text() extracts content from hidden elements
-            # Malicious prompts in hidden divs will be extracted
-
             return extracted_text
         except Exception as e:
             logger.error(f"HTML processing error: {e}")
@@ -200,18 +194,13 @@ class FileProcessorAgent:
         """
         Process image file.
 
-        VULNERABILITY: Image processing extracts EXIF metadata which
-        could contain malicious prompts in comment/description fields.
+        VULNERABILITY:
+        OCR text and metadata are extracted without scanning for malicious
+        instructions in EXIF comment or description fields.
         """
         try:
             image_bytes = base64.b64decode(content)
-
-            # Extract both visual text (OCR) and metadata
             extracted = await self.image_parser.extract_all(image_bytes)
-
-            # VULNERABILITY: EXIF data extracted and included without scanning
-            # Comment, UserComment, ImageDescription fields could contain injections
-
             return extracted
         except Exception as e:
             logger.error(f"Image processing error: {e}")
@@ -221,22 +210,15 @@ class FileProcessorAgent:
         """
         Process JSON content.
 
-        VULNERABILITY: JSON content processed without PII scanning.
-        Nested objects containing sensitive data are passed through.
+        VULNERABILITY:
+        JSON strings and nested fields are returned without checking for
+        malicious prompt content.
         """
         import json
 
         try:
-            # Parse to validate JSON
             data = json.loads(content)
-
-            # VULNERABILITY: No PII detection in nested objects
-            # Data like user.profile.contact.ssn passes through
-            # No recursive scanning for sensitive patterns
-
-            # Convert back to formatted string for analysis
             formatted = json.dumps(data, indent=2)
-
             return f"JSON Content:\n{formatted}"
         except json.JSONDecodeError as e:
             return f"Invalid JSON: {str(e)}\n\nRaw content:\n{content}"
@@ -245,10 +227,12 @@ class FileProcessorAgent:
         """
         Validate file before processing.
 
-        VULNERABILITY: Validation only checks format, not content.
-        No security scanning performed.
+        VULNERABILITY:
+        Validation only checks superficial properties and does not scan for:
+        - prompt injection
+        - hidden prompts
+        - encoded malicious content
         """
-        # Basic validation only
         validation_result = {
             "valid": True,
             "filename": filename,
@@ -256,15 +240,7 @@ class FileProcessorAgent:
             "warnings": []
         }
 
-        # Size check (but no PII/threat check)
-        if len(content) > 10 * 1024 * 1024:  # 10MB
+        if content and len(content) > 10 * 1024 * 1024:
             validation_result["warnings"].append("Large file - processing may be slow")
-
-        # VULNERABILITY: No content-based security validation
-        # Should check for:
-        # - PII patterns
-        # - Known malware signatures
-        # - Prompt injection patterns
-        # - Hidden content indicators
 
         return validation_result
