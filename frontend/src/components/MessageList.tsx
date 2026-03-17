@@ -2,7 +2,7 @@
 
 import { Message } from './ChatInterface'
 import { ErrorDisplay } from './ErrorDisplay'
-import { User, Bot, Paperclip } from 'lucide-react'
+import { Bot, Paperclip, User2 } from 'lucide-react'
 
 interface MessageListProps {
   messages: Message[]
@@ -10,61 +10,74 @@ interface MessageListProps {
 
 export function MessageList({ messages }: MessageListProps) {
   return (
-    <div className="flex flex-col">
+    <div className="mx-auto flex w-full max-w-4xl flex-col gap-4">
       {messages.map((message) => (
         <div
           key={message.id}
-          className={`py-6 ${
-            message.role === 'assistant' ? 'bg-chat-hover' : ''
+          className={`fade-in-up flex ${
+            message.role === 'user' ? 'justify-end' : 'justify-start'
           }`}
         >
-          <div className="max-w-3xl mx-auto px-4 flex gap-4">
-            {/* Avatar */}
+          <div
+            className={`flex w-full max-w-3xl gap-3 ${
+              message.role === 'user' ? 'flex-row-reverse' : 'flex-row'
+            }`}
+          >
             <div
-              className={`flex-shrink-0 w-8 h-8 rounded-sm flex items-center justify-center ${
+              className={`mt-1 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl ${
                 message.role === 'user'
-                  ? 'bg-purple-600'
-                  : 'bg-teal-600'
+                  ? 'bg-slate-100 text-slate-900'
+                  : 'bg-teal-300/15 text-teal-100 ring-1 ring-inset ring-teal-200/20'
               }`}
             >
               {message.role === 'user' ? (
-                <User className="w-5 h-5 text-white" />
+                <User2 className="h-5 w-5" />
               ) : (
-                <Bot className="w-5 h-5 text-white" />
+                <Bot className="h-5 w-5" />
               )}
             </div>
 
-            {/* Content */}
-            <div className="flex-1 min-w-0">
-              {/* Attachments */}
+            <div className="min-w-0 flex-1">
+              <div
+                className={`overflow-hidden rounded-[24px] border px-5 py-4 shadow-[0_18px_50px_rgba(2,6,23,0.18)] ${
+                  message.role === 'user'
+                    ? 'border-white/10 bg-slate-100 text-slate-900'
+                    : 'border-white/10 bg-slate-900/70 text-slate-100'
+                }`}
+              >
               {message.attachments && message.attachments.length > 0 && (
-                <div className="flex flex-wrap gap-2 mb-3">
+                  <div className="mb-3 flex flex-wrap gap-2">
                   {message.attachments.map((attachment) => (
                     <div
                       key={attachment.id}
-                      className="flex items-center gap-2 bg-chat-input rounded-lg px-3 py-2 text-sm border border-chat-border"
+                        className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm ${
+                          message.role === 'user'
+                            ? 'border-slate-300 bg-white text-slate-700'
+                            : 'border-white/10 bg-white/5 text-slate-300'
+                        }`}
                     >
-                      <Paperclip className="w-4 h-4 text-gray-400" />
-                      <span className="text-gray-300">{attachment.name}</span>
-                      <span className="text-gray-500 text-xs">
+                        <Paperclip className="h-4 w-4 opacity-70" />
+                        <span className="max-w-[180px] truncate">{attachment.name}</span>
+                        <span className="text-xs opacity-60">
                         ({formatFileSize(attachment.size)})
                       </span>
                     </div>
                   ))}
-                </div>
+                  </div>
               )}
 
-              {/* Message Content or Error */}
               {message.error ? (
                 <ErrorDisplay error={message.error} />
               ) : (
-                <div className="message-content text-gray-100">
-                  {message.content}
-                </div>
+                  <div className="message-content text-sm sm:text-[15px]">{message.content}</div>
               )}
+              </div>
 
-              {/* Timestamp */}
-              <div className="text-xs text-gray-500 mt-2">
+              <div
+                className={`mt-2 px-1 text-xs text-slate-500 ${
+                  message.role === 'user' ? 'text-right' : 'text-left'
+                }`}
+              >
                 {formatTime(message.timestamp)}
               </div>
             </div>

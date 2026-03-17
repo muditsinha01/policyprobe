@@ -4,7 +4,14 @@ import { useState, useRef, useEffect } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import { MessageList } from './MessageList'
 import { FileUpload } from './FileUpload'
-import { Send, Paperclip, Loader2 } from 'lucide-react'
+import {
+  ArrowUp,
+  Bot,
+  Loader2,
+  Paperclip,
+  ShieldCheck,
+  Sparkles,
+} from 'lucide-react'
 
 export interface Message {
   id: string
@@ -36,13 +43,17 @@ export function ChatInterface() {
   const [pendingFiles, setPendingFiles] = useState<File[]>([])
   const [showFileUpload, setShowFileUpload] = useState(false)
   const inputRef = useRef<HTMLTextAreaElement>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (inputRef.current) {
       inputRef.current.focus()
     }
   }, [])
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages, isLoading, showFileUpload])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -175,116 +186,144 @@ export function ChatInterface() {
   }
 
   return (
-    <div className="flex flex-col h-screen">
-      {/* Header */}
-      <header className="flex items-center justify-center py-3 border-b border-chat-border bg-chat-sidebar">
-        <h1 className="text-xl font-semibold text-white">PolicyProbe</h1>
-      </header>
-
-      {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto chat-scrollbar">
-        {messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-gray-400">
-            <div className="text-4xl mb-4">🔍</div>
-            <h2 className="text-2xl font-medium text-white mb-2">PolicyProbe</h2>
-            <p className="text-center max-w-md">
-              Upload documents to analyze or ask questions about policy compliance.
-              <br />
-              <span className="text-sm text-gray-500 mt-2 block">
-                Supports PDF, Word, HTML, and image files
-              </span>
-            </p>
+    <div className="mx-auto flex h-screen w-full max-w-6xl flex-col px-4 pb-4 pt-4 sm:px-6 lg:px-8">
+      <div className="glass-panel flex min-h-0 flex-1 flex-col overflow-hidden rounded-[28px]">
+        <header className="soft-divider flex items-center justify-between border-b px-5 py-4 sm:px-6">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-teal-400/12 text-teal-200 ring-1 ring-inset ring-teal-300/20">
+              <Bot className="h-5 w-5" />
+            </div>
+            <div>
+              <h1 className="text-lg font-semibold tracking-tight text-slate-50">Acme Helper</h1>
+              <p className="text-sm text-slate-400">
+                Secure policy guidance and document review in one lightweight chat.
+              </p>
+            </div>
           </div>
-        ) : (
-          <MessageList messages={messages} />
-        )}
-      </div>
+          <div className="hidden items-center gap-2 rounded-full border border-emerald-400/18 bg-emerald-400/10 px-3 py-1.5 text-xs font-medium text-emerald-200 sm:flex">
+            <ShieldCheck className="h-3.5 w-3.5" />
+            Ready for secure review
+          </div>
+        </header>
 
-      {/* File Upload Modal */}
-      {showFileUpload && (
-        <div className="border-t border-chat-border bg-chat-input p-4">
-          <FileUpload onFilesSelected={handleFileSelect} />
-        </div>
-      )}
-
-      {/* Pending Files Display */}
-      {pendingFiles.length > 0 && (
-        <div className="border-t border-chat-border bg-chat-input px-4 py-2">
-          <div className="flex flex-wrap gap-2">
-            {pendingFiles.map((file, index) => (
-              <div
-                key={index}
-                className="flex items-center gap-2 bg-chat-hover rounded-lg px-3 py-1.5 text-sm"
-              >
-                <span className="text-gray-300">{file.name}</span>
-                <button
-                  onClick={() => removePendingFile(index)}
-                  className="text-gray-500 hover:text-red-400"
-                >
-                  ×
-                </button>
+        <div className="chat-scrollbar flex-1 overflow-y-auto px-4 py-5 sm:px-6">
+          {messages.length === 0 ? (
+            <div className="fade-in-up flex h-full flex-col items-center justify-center">
+              <div className="max-w-3xl text-center">
+                <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-3xl bg-gradient-to-br from-teal-300/20 via-cyan-300/10 to-amber-200/20 text-teal-100 ring-1 ring-inset ring-white/10">
+                  <Sparkles className="h-7 w-7" />
+                </div>
+                <h2 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+                  Ask Acme Helper anything about policy and compliance.
+                </h2>
+                <p className="mx-auto mt-4 max-w-2xl text-base leading-7 text-slate-400 sm:text-lg">
+                  Drop in documents, ask focused questions, and get lightweight guidance in a
+                  chat experience built for quick review.
+                </p>
+                <div className="mt-8 grid gap-3 text-left sm:grid-cols-3">
+                  <div className="rounded-2xl border border-white/8 bg-white/5 p-4">
+                    <p className="text-sm font-medium text-slate-200">Review uploads</p>
+                    <p className="mt-2 text-sm text-slate-400">
+                      Supports PDF, Word, HTML, text, JSON, and common image formats.
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-white/8 bg-white/5 p-4">
+                    <p className="text-sm font-medium text-slate-200">Stay in flow</p>
+                    <p className="mt-2 text-sm text-slate-400">
+                      Keep conversation and files in a single focused workspace.
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-white/8 bg-white/5 p-4">
+                    <p className="text-sm font-medium text-slate-200">Catch issues early</p>
+                    <p className="mt-2 text-sm text-slate-400">
+                      Policy warnings and security issues remain visible inline.
+                    </p>
+                  </div>
+                </div>
               </div>
-            ))}
-          </div>
+            </div>
+          ) : (
+            <>
+              <MessageList messages={messages} />
+              <div ref={messagesEndRef} />
+            </>
+          )}
         </div>
-      )}
 
-      {/* Input Area */}
-      <div className="border-t border-chat-border bg-chat-bg p-4">
-        <form onSubmit={handleSubmit} className="max-w-3xl mx-auto">
-          <div className="relative flex items-end bg-chat-input rounded-xl border border-chat-border">
-            {/* File Upload Button */}
-            <button
-              type="button"
-              onClick={() => setShowFileUpload(!showFileUpload)}
-              className="p-3 text-gray-400 hover:text-white transition-colors"
-            >
-              <Paperclip className="w-5 h-5" />
-            </button>
-
-            {/* Hidden file input */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              accept=".pdf,.doc,.docx,.html,.htm,.txt,.json,.jpg,.jpeg,.png"
-              className="hidden"
-              onChange={(e) => {
-                if (e.target.files) {
-                  handleFileSelect(Array.from(e.target.files))
-                }
-              }}
-            />
-
-            {/* Text Input */}
-            <textarea
-              ref={inputRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Message PolicyProbe..."
-              className="flex-1 bg-transparent text-white placeholder-gray-500 resize-none py-3 pr-12 focus:outline-none max-h-48"
-              rows={1}
-              disabled={isLoading}
-            />
-
-            {/* Send Button */}
-            <button
-              type="submit"
-              disabled={isLoading || (!input.trim() && pendingFiles.length === 0)}
-              className="absolute right-2 bottom-2 p-2 text-gray-400 hover:text-white disabled:opacity-50 disabled:hover:text-gray-400 transition-colors"
-            >
-              {isLoading ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
-              ) : (
-                <Send className="w-5 h-5" />
-              )}
-            </button>
+        {showFileUpload && (
+          <div className="soft-divider border-t px-4 py-4 sm:px-6">
+            <FileUpload onFilesSelected={handleFileSelect} />
           </div>
-          <p className="text-xs text-center text-gray-500 mt-2">
-            PolicyProbe demonstrates AI policy evaluation and remediation
-          </p>
-        </form>
+        )}
+
+        {pendingFiles.length > 0 && (
+          <div className="soft-divider border-t px-4 py-3 sm:px-6">
+            <div className="flex flex-wrap gap-2">
+              {pendingFiles.map((file, index) => (
+                <div
+                  key={`${file.name}-${index}`}
+                  className="flex items-center gap-2 rounded-full border border-white/10 bg-slate-900/70 px-3 py-1.5 text-sm text-slate-300"
+                >
+                  <span className="max-w-[220px] truncate">{file.name}</span>
+                  <button
+                    onClick={() => removePendingFile(index)}
+                    className="text-slate-500 transition-colors hover:text-rose-300"
+                    aria-label={`Remove ${file.name}`}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="soft-divider border-t px-4 py-4 sm:px-6">
+          <form onSubmit={handleSubmit} className="mx-auto max-w-4xl">
+            <div className="rounded-[24px] border border-white/10 bg-slate-950/70 p-2 shadow-[0_20px_60px_rgba(2,6,23,0.45)]">
+              <div className="flex items-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowFileUpload(!showFileUpload)}
+                  className="mb-1 rounded-2xl p-3 text-slate-400 transition-colors hover:bg-white/5 hover:text-slate-100"
+                  aria-label={showFileUpload ? 'Hide file upload' : 'Show file upload'}
+                >
+                  <Paperclip className="h-5 w-5" />
+                </button>
+
+                <div className="flex-1">
+                  <textarea
+                    ref={inputRef}
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder="Ask about a policy, summarize a document, or upload files for review..."
+                    className="max-h-40 min-h-[56px] w-full resize-none bg-transparent px-2 py-3 text-[15px] text-slate-100 outline-none placeholder:text-slate-500"
+                    rows={1}
+                    disabled={isLoading}
+                  />
+                  <div className="flex items-center justify-between px-2 pb-2">
+                    <p className="text-xs text-slate-500">
+                      Press Enter to send. Shift+Enter for a new line.
+                    </p>
+                    <button
+                      type="submit"
+                      disabled={isLoading || (!input.trim() && pendingFiles.length === 0)}
+                      className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-teal-300 text-slate-950 transition hover:bg-teal-200 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500"
+                      aria-label="Send message"
+                    >
+                      {isLoading ? (
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                      ) : (
+                        <ArrowUp className="h-5 w-5" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
   )

@@ -51,7 +51,7 @@ export function FileUpload({ onFilesSelected }: FileUploadProps) {
 
   return (
     <div
-      className={`file-upload-zone rounded-lg p-6 text-center cursor-pointer ${
+      className={`file-upload-zone rounded-[24px] p-6 text-center cursor-pointer ${
         isDragOver ? 'drag-over' : ''
       }`}
       onDrop={handleDrop}
@@ -67,21 +67,27 @@ export function FileUpload({ onFilesSelected }: FileUploadProps) {
         onChange={handleFileInput}
       />
       <label htmlFor="file-upload-input" className="cursor-pointer">
-        <Upload className="w-10 h-10 text-gray-400 mx-auto mb-3" />
-        <p className="text-gray-300 mb-2">
+        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-teal-300/10 text-teal-100">
+          <Upload className="h-6 w-6" />
+        </div>
+        <p className="mb-2 text-sm font-medium text-slate-200 sm:text-base">
           Drag and drop files here, or click to browse
         </p>
-        <div className="flex justify-center gap-4 text-xs text-gray-500">
+        <p className="mx-auto mb-4 max-w-xl text-sm text-slate-400">
+          Add supporting documents to the conversation and Acme Helper will include them in
+          the next review.
+        </p>
+        <div className="flex flex-wrap justify-center gap-4 text-xs text-slate-500">
           <div className="flex items-center gap-1">
-            <FileText className="w-4 h-4" />
+            <FileText className="h-4 w-4" />
             <span>PDF, DOC, HTML</span>
           </div>
           <div className="flex items-center gap-1">
-            <Image className="w-4 h-4" />
+            <Image className="h-4 w-4" />
             <span>JPG, PNG</span>
           </div>
           <div className="flex items-center gap-1">
-            <File className="w-4 h-4" />
+            <File className="h-4 w-4" />
             <span>TXT, JSON</span>
           </div>
         </div>

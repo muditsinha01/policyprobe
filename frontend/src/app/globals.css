@@ -3,57 +3,85 @@
 @tailwind utilities;
 
 :root {
-  --foreground-rgb: 255, 255, 255;
-  --background-start-rgb: 52, 53, 65;
-  --background-end-rgb: 52, 53, 65;
+  --foreground-rgb: 225, 232, 238;
+  --background-start-rgb: 6, 16, 24;
+  --background-end-rgb: 11, 25, 34;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
+  min-height: 100vh;
   color: rgb(var(--foreground-rgb));
-  background: linear-gradient(
-      to bottom,
-      transparent,
-      rgb(var(--background-end-rgb))
-    )
-    rgb(var(--background-start-rgb));
+  background:
+    radial-gradient(circle at top, rgba(61, 152, 139, 0.24), transparent 34%),
+    radial-gradient(circle at bottom right, rgba(245, 166, 35, 0.12), transparent 24%),
+    linear-gradient(180deg, rgb(var(--background-start-rgb)) 0%, rgb(var(--background-end-rgb)) 100%);
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.05) 1px, transparent 1px);
+  background-size: 32px 32px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.45), transparent 85%);
+}
+
+::selection {
+  background: rgba(61, 152, 139, 0.35);
+  color: #f8fafc;
 }
 
 /* Custom scrollbar for chat area */
 .chat-scrollbar::-webkit-scrollbar {
-  width: 8px;
+  width: 10px;
 }
 
 .chat-scrollbar::-webkit-scrollbar-track {
-  background: #2a2b32;
+  background: transparent;
 }
 
 .chat-scrollbar::-webkit-scrollbar-thumb {
-  background: #565869;
-  border-radius: 4px;
+  background: rgba(100, 116, 139, 0.5);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
 
 .chat-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #6e6e80;
+  background: rgba(148, 163, 184, 0.72);
 }
 
 /* Message styling */
 .message-content {
   white-space: pre-wrap;
-  word-wrap: break-word;
+  word-break: break-word;
+  line-height: 1.7;
 }
 
 .message-content code {
-  background-color: #1e1e1e;
+  background-color: rgba(15, 23, 42, 0.8);
   padding: 0.2em 0.4em;
-  border-radius: 3px;
+  border-radius: 0.4rem;
   font-size: 0.9em;
 }
 
 .message-content pre {
-  background-color: #1e1e1e;
+  background-color: rgba(15, 23, 42, 0.92);
   padding: 1em;
-  border-radius: 6px;
+  border-radius: 0.9rem;
   overflow-x: auto;
+  border: 1px solid rgba(148, 163, 184, 0.14);
 }
 
 /* Error styling */
@@ -66,12 +94,41 @@ body {
 
 /* File upload styling */
 .file-upload-zone {
-  border: 2px dashed #565869;
+  border: 1px dashed rgba(148, 163, 184, 0.35);
+  background: rgba(15, 23, 42, 0.32);
   transition: all 0.2s ease;
 }
 
 .file-upload-zone:hover,
 .file-upload-zone.drag-over {
-  border-color: #10a37f;
-  background-color: rgba(16, 163, 127, 0.1);
+  border-color: rgba(94, 234, 212, 0.6);
+  background-color: rgba(45, 212, 191, 0.08);
+}
+
+.glass-panel {
+  background: rgba(8, 15, 24, 0.72);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  box-shadow:
+    0 24px 80px rgba(2, 6, 23, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(20px);
+}
+
+.soft-divider {
+  border-color: rgba(148, 163, 184, 0.12);
+}
+
+.fade-in-up {
+  animation: fade-in-up 0.32s ease-out both;
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

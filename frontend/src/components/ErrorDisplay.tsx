@@ -54,7 +54,7 @@ export function ErrorDisplay({ error }: ErrorDisplayProps) {
 
   return (
     <div
-      className={`${config.bgColor} border-l-4 ${config.borderColor} rounded-r-lg p-4`}
+      className={`${config.bgColor} ${config.borderColor} rounded-[20px] border p-4`}
     >
       <div className="flex items-start gap-3">
         <div className={`flex-shrink-0 ${config.iconColor}`}>
@@ -75,7 +75,7 @@ export function ErrorDisplay({ error }: ErrorDisplayProps) {
                 <summary className="text-gray-400 hover:text-gray-300">
                   View Details
                 </summary>
-                <pre className="mt-2 bg-black/30 rounded p-2 overflow-x-auto text-gray-400">
+                <pre className="mt-2 overflow-x-auto rounded-xl bg-black/30 p-3 text-gray-400">
                   {JSON.stringify(error.details, null, 2)}
                 </pre>
               </details>
