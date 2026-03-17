@@ -3,14 +3,14 @@ Agent Orchestrator
 
 Routes requests between specialized agents based on intent classification.
 Manages the multi-agent workflow and aggregates responses.
-
-SECURITY NOTES (for Unifai demo):
-- Inter-agent calls are not authenticated
-- No privilege verification between agent calls
-- Token passed but never validated
 """
 
+import hashlib
+import hmac
 import logging
+import re
+import secrets
+import time
 from typing import Any, Optional
 
 from .tech_support import TechSupportAgent
@@ -20,6 +20,37 @@ from .auth.agent_auth import AgentAuthenticator, AgentIdentity
 from llm.openrouter import OpenRouterClient
 
 logger = logging.getLogger(__name__)
+
+
+_PII_PATTERNS: dict[str, re.Pattern] = {
+    "SSN": re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),
+    "NRIC": re.compile(r"\b[STFGM]\d{7}[A-Z]\b", re.IGNORECASE),
+    "FIN": re.compile(r"\b[FGM]\d{7}[A-Z]\b", re.IGNORECASE),
+    "Passport Number": re.compile(r"\b[A-Z]{1,2}\d{6,9}\b"),
+    "Credit Card Number": re.compile(r"\b(?:\d[ -]*?){13,19}\b"),
+    "Email": re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b"),
+    "Phone Number": re.compile(r"\b(?:\+?\d{1,3}[-.\s]?)?\(?\d{2,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{4}\b"),
+    "IP Address": re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b"),
+    "MAC Address": re.compile(r"\b(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\b"),
+    "Date of Birth": re.compile(
+        r"\b(?:DOB|Date of Birth|D\.O\.B\.?)\s*[:\-]?\s*\d{1,4}[/\-\.]\d{1,2}[/\-\.]\d{1,4}\b",
+        re.IGNORECASE,
+    ),
+    "Bank Account Number": re.compile(r"\b\d{8,17}\b"),
+    "Driver License": re.compile(r"\b[A-Z]\d{7,14}\b"),
+    "GPS Coordinates": re.compile(r"-?\d{1,3}\.\d{4,},\s*-?\d{1,3}\.\d{4,}"),
+    "Vehicle VIN": re.compile(r"\b[A-HJ-NPR-Z0-9]{17}\b"),
+    "IMEI": re.compile(r"\b\d{15}\b"),
+    "CPF Account Number": re.compile(r"\b[A-Z]{2}\d{7}[A-Z]\b", re.IGNORECASE),
+    "Tax ID": re.compile(r"\b\d{2}-\d{7}\b"),
+}
+
+
+def _redact_pii(text: str) -> str:
+    """Scan *text* for PII patterns and replace matches with REDACTED."""
+    for label, pattern in _PII_PATTERNS.items():
+        text = pattern.sub("REDACTED", text)
+    return text
 
 
 class AgentOrchestrator:
@@ -32,6 +63,8 @@ class AgentOrchestrator:
     3. Handles inter-agent communication
     4. Aggregates and returns responses
     """
+
+    TOKEN_TTL_SECONDS = 300
 
     def __init__(self):
         self.llm_client = OpenRouterClient()
@@ -61,9 +94,37 @@ class AgentOrchestrator:
             }
         }
 
-        # Token for inter-agent communication
-        # VULNERABILITY: Token is generated but never validated on receiving end
-        self._agent_token = "internal-agent-token-12345"
+        self._agent_secret = secrets.token_hex(32)
+
+    def _generate_agent_token(self, caller_id: str, target_id: str) -> str:
+        """Create a short-lived HMAC token scoped to a specific agent-to-agent call."""
+        timestamp = str(int(time.time()))
+        payload = f"{caller_id}:{target_id}:{timestamp}"
+        signature = hmac.new(
+            self._agent_secret.encode(), payload.encode(), hashlib.sha256
+        ).hexdigest()
+        return f"{payload}:{signature}"
+
+    def _validate_agent_token(self, token: str, expected_caller: str, expected_target: str) -> bool:
+        """Validate an inter-agent HMAC token, checking caller, target and expiry."""
+        try:
+            parts = token.rsplit(":", 1)
+            if len(parts) != 2:
+                return False
+            payload, signature = parts
+            expected_sig = hmac.new(
+                self._agent_secret.encode(), payload.encode(), hashlib.sha256
+            ).hexdigest()
+            if not hmac.compare_digest(signature, expected_sig):
+                return False
+            caller_id, target_id, ts = payload.split(":")
+            if caller_id != expected_caller or target_id != expected_target:
+                return False
+            if abs(time.time() - int(ts)) > self.TOKEN_TTL_SECONDS:
+                return False
+            return True
+        except Exception:
+            return False
 
     async def process(self, context: dict[str, Any]) -> dict[str, Any]:
         """
@@ -83,8 +144,6 @@ class AgentOrchestrator:
             extra={
                 "message_length": len(user_message),
                 "file_count": len(file_contents),
-                # VULNERABILITY: Logging full context including potential PII
-                "context_preview": str(context)[:200]
             }
         )
 
@@ -93,7 +152,6 @@ class AgentOrchestrator:
 
         # Route to appropriate agent
         if intent == "finance":
-            # VULNERABILITY: Tech support can route to finance without auth verification
             return await self._route_to_finance(context)
         elif intent == "file_analysis":
             return await self._route_to_file_processor(context)
@@ -132,16 +190,19 @@ class AgentOrchestrator:
         context: dict[str, Any]
     ) -> dict[str, Any]:
         """Route request to tech support agent."""
-        # Create internal caller identity
         caller = AgentIdentity(
             agent_id="orchestrator",
             agent_name="Orchestrator",
             privilege_level="system",
-            is_internal=True  # Flag that bypasses auth
+            is_internal=True
         )
 
-        # VULNERABILITY: Token passed but never validated by receiving agent
-        headers = {"X-Agent-Token": self._agent_token}
+        token = self._generate_agent_token("orchestrator", "tech_support")
+        if not self._validate_agent_token(token, "orchestrator", "tech_support"):
+            logger.error("Inter-agent auth failed for orchestrator -> tech_support")
+            return {"response": "Internal authentication error.", "agent": "orchestrator"}
+
+        headers = {"X-Agent-Token": token}
 
         response = await self.tech_support.handle(
             context=context,
@@ -155,14 +216,7 @@ class AgentOrchestrator:
         self,
         context: dict[str, Any]
     ) -> dict[str, Any]:
-        """
-        Route request to finance agent.
-
-        VULNERABILITY: This method allows routing to high-privilege agent
-        without proper authentication or authorization checks.
-        """
-        # Create internal caller identity
-        # VULNERABILITY: is_internal=True bypasses privilege checks
+        """Route request to finance agent with authenticated inter-agent call."""
         caller = AgentIdentity(
             agent_id="orchestrator",
             agent_name="Orchestrator",
@@ -170,16 +224,18 @@ class AgentOrchestrator:
             is_internal=True
         )
 
-        # Token passed but receiver doesn't validate
-        headers = {"X-Agent-Token": self._agent_token}
+        token = self._generate_agent_token("orchestrator", "finance")
+        if not self._validate_agent_token(token, "orchestrator", "finance"):
+            logger.error("Inter-agent auth failed for orchestrator -> finance")
+            return {"response": "Internal authentication error.", "agent": "orchestrator"}
+
+        headers = {"X-Agent-Token": token}
 
         logger.info(
             "Routing to finance agent",
             extra={
                 "caller": caller.agent_id,
                 "privilege": caller.privilege_level,
-                # Token visible in logs
-                "token_preview": self._agent_token[:10] + "..."
             }
         )
 
@@ -204,20 +260,16 @@ class AgentOrchestrator:
                 "agent": "file_processor"
             }
 
-        # Process files and get analysis
+        # Process files, redacting PII before sending to the LLM
         analyses = []
         for file_data in file_contents:
-            extracted = file_data.get("extracted_content", "")
+            extracted = _redact_pii(file_data.get("extracted_content", ""))
             analyses.append(f"File: {file_data.get('filename')}\n{extracted}")
 
         combined_content = "\n\n".join(analyses)
 
-        # Get the user's actual question
         user_question = context.get("user_message", "")
 
-        # Get LLM analysis of file contents
-        # VULNERABILITY: File content sent directly to LLM without PII/threat scanning
-        # VULNERABILITY: User's question passed through without checking for PII requests
         analysis = await self.llm_client.chat(
             messages=[
                 {
@@ -250,13 +302,17 @@ Please answer the user's question based on the document content above."""
         """
         Handle escalation from tech support to finance agent.
 
-        This method is called when tech support needs to access
-        financial data on behalf of a user.
-
-        VULNERABILITY: No verification that tech support has permission
-        to access finance agent on behalf of this user.
+        Validates that the escalation carries a valid inter-agent token
+        before forwarding to the finance agent.
         """
-        # VULNERABILITY: Direct escalation without privilege verification
+        incoming_token = tech_support_context.get("agent_token", "")
+        if not self._validate_agent_token(incoming_token, "tech_support", "finance"):
+            logger.warning("Unauthorised escalation attempt from tech_support to finance")
+            return {
+                "response": "Escalation denied: inter-agent authentication failed.",
+                "agent": "orchestrator",
+            }
+
         escalation_context = {
             "user_message": query,
             "escalated_from": "tech_support",
@@ -264,12 +320,6 @@ Please answer the user's question based on the document content above."""
             "escalation_reason": "Financial data requested"
         }
 
-        logger.info(
-            "Escalating from tech support to finance",
-            extra={
-                "query": query,
-                "original_context": str(tech_support_context)[:100]
-            }
-        )
+        logger.info("Escalating from tech support to finance")
 
         return await self._route_to_finance(escalation_context)
