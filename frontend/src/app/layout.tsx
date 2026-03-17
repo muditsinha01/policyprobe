@@ -5,7 +5,7 @@ import './globals.css'
 const manrope = Manrope({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Acme Loan Processor',
+  title: 'Acme Loan Assistant',
   description: 'Lightweight AI assistant for document review and loan-related chat',
 }
 

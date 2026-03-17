@@ -212,7 +212,7 @@ export function ChatInterface() {
               <div className="h-3 w-3 rounded-full bg-white/95" />
             </div>
             <div>
-              <h1 className="text-lg font-semibold tracking-tight text-slate-900">Acme Loan Processor</h1>
+              <h1 className="text-lg font-semibold tracking-tight text-slate-900">Acme Loan Assistant</h1>
             </div>
           </div>
           <div className="hidden text-sm text-slate-500 sm:block">Loan assistant</div>
@@ -223,7 +223,7 @@ export function ChatInterface() {
             <div className="fade-in-up flex h-full items-start justify-center pt-10 sm:pt-14">
               <div className="w-full max-w-3xl">
                 <p className="text-2xl font-semibold tracking-tight text-slate-900">
-                  Hello, welcome to Acme Loan Processor.
+                  Hello, welcome to Acme Loan Assistant.
                 </p>
                 <p className="mt-2 text-sm text-slate-500">
                   Start with a question or attach a file to continue.
