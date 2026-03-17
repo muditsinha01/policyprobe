@@ -5,6 +5,7 @@ File Processor Agent
 
 import base64
 import logging
+import re
 from typing import Optional
 
 from file_parsers.pdf_parser import PDFParser
@@ -38,11 +39,36 @@ class FileProcessorAgent:
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "word",
     }
 
+    # PII patterns: general + Singapore zero-tolerance categories
+    _PII_PATTERNS = [
+        # General
+        (r"\b\d{3}-\d{2}-\d{4}\b", "SSN"),
+        (r"\b(?:\d{4}[-\s]?){3}\d{4}\b", "Credit Card"),
+        (r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", "Email"),
+        (r"\b(?:\+1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b", "US Phone"),
+        (r"\b(?:\+\d{1,3}[-.\s]?)?\(?\d{2,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{3,4}\b", "Phone"),
+        (r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b", "IP Address"),
+        (r"\b[A-Z]{1,2}\d{6,9}[A-Z]?\b", "Passport/ID"),
+        (r"\b\d{16,19}\b", "Financial Account"),
+        # Singapore: NRIC (S/T + 7 digits + checksum), FIN (F/G + 7 digits + letter)
+        (r"\b[ST]\d{7}[A-Z]\b", "NRIC"),
+        (r"\b[FG]\d{7}[A-Z]\b", "FIN"),
+    ]
+
     def __init__(self):
         self.pdf_parser = PDFParser()
         self.image_parser = ImageParser()
         self.html_parser = HTMLParser()
         self.agent_id = "file_processor"
+
+    def _redact_pii(self, text: str) -> str:
+        """Redact PII from content. Replaces matches with REDACTED."""
+        if not text:
+            return text
+        result = text
+        for pattern, _ in self._PII_PATTERNS:
+            result = re.sub(pattern, "REDACTED", result)
+        return result
 
     async def process(
         self,
@@ -59,14 +85,7 @@ class FileProcessorAgent:
             content_type: MIME type of the file
 
         Returns:
-            Extracted text content from the file
-
-        VULNERABILITY: No security scanning performed on file content.
-        Files are processed and content extracted without checking for:
-        - PII (SSN, credit cards, phone numbers)
-        - Hidden/malicious prompts
-        - Malware signatures
-        - Sensitive data patterns
+            Extracted text content from the file (PII redacted)
         """
         logger.info(
             "Processing file",
@@ -74,8 +93,6 @@ class FileProcessorAgent:
                 "file_name": filename,
                 "file_type": content_type,
                 "content_length": len(content) if content else 0,
-                # VULNERABILITY: Content preview in logs could contain sensitive data
-                "content_preview": content[:100] if content else None
             }
         )
 
@@ -101,25 +118,18 @@ class FileProcessorAgent:
             else:
                 extracted = f"Unsupported file type: {content_type}"
 
-            # VULNERABILITY: No post-processing security scan
-            # Extracted content could contain:
-            # - Hidden prompt injections (invisible text, encoded data)
-            # - PII that should be masked
-            # - Malicious instructions
-            #
-            # NOTE: Return extracted content directly to preserve the original
-            # downstream contract for other detections like PII lookup.
+            # Redact PII before returning (Singapore + general zero-tolerance categories)
+            redacted = self._redact_pii(extracted)
+
             logger.info(
                 "File processing complete",
                 extra={
                     "file_name": filename,
-                    "extracted_length": len(extracted),
-                    # VULNERABILITY: Full extracted content in logs
-                    "extracted_preview": extracted[:200]
+                    "extracted_length": len(redacted),
                 }
             )
 
-            return extracted
+            return redacted
 
         except Exception as e:
             logger.error(
@@ -127,8 +137,6 @@ class FileProcessorAgent:
                 extra={
                     "file_name": filename,
                     "error": str(e),
-                    # VULNERABILITY: Full content in error logs
-                    "file_content": content[:500] if content else None
                 }
             )
             return f"Error processing {filename}: {str(e)}"
