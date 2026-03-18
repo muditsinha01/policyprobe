@@ -212,20 +212,20 @@ export function ChatInterface() {
               <div className="h-3 w-3 rounded-full bg-white/95" />
             </div>
             <div>
-              <h1 className="text-lg font-semibold tracking-tight text-slate-900">Acme Loan Assistant</h1>
+              <h1 className="text-lg font-semibold tracking-tight text-slate-50">Acme Loan Processor</h1>
             </div>
           </div>
-          <div className="hidden text-sm text-slate-500 sm:block">Loan assistant</div>
+          <div className="hidden text-sm text-slate-400 sm:block">Loan assistant</div>
         </header>
 
         <div className="chat-scrollbar flex-1 overflow-y-auto px-4 py-5 sm:px-6">
           {messages.length === 0 ? (
             <div className="fade-in-up flex h-full items-start justify-center pt-10 sm:pt-14">
               <div className="w-full max-w-3xl">
-                <p className="text-2xl font-semibold tracking-tight text-slate-900">
-                  Hello, welcome to Acme Loan Assistant.
+                <p className="text-2xl font-semibold tracking-tight text-slate-50">
+                  Hello, welcome to Acme Loan Processor.
                 </p>
-                <p className="mt-2 text-sm text-slate-500">
+                <p className="mt-2 text-sm text-slate-400">
                   Start with a question or attach a file to continue.
                 </p>
                 <div className="mt-6 flex flex-wrap gap-3">
@@ -234,7 +234,7 @@ export function ChatInterface() {
                       key={prompt.label}
                       type="button"
                       onClick={prompt.action}
-                      className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 transition hover:border-sky-200 hover:bg-sky-50 hover:text-sky-700"
+                      className="rounded-full border border-slate-700 bg-slate-900/90 px-4 py-2 text-sm text-slate-200 transition hover:border-sky-500/40 hover:bg-slate-800 hover:text-sky-200"
                     >
                       {prompt.label}
                     </button>
@@ -262,12 +262,12 @@ export function ChatInterface() {
               {pendingFiles.map((file, index) => (
                 <div
                   key={`${file.name}-${index}`}
-                  className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700"
+                  className="flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm text-slate-200"
                 >
                   <span className="max-w-[220px] truncate">{file.name}</span>
                   <button
                     onClick={() => removePendingFile(index)}
-                    className="text-slate-400 transition-colors hover:text-rose-500"
+                    className="text-slate-500 transition-colors hover:text-rose-400"
                     aria-label={`Remove ${file.name}`}
                   >
                     ×
@@ -280,12 +280,12 @@ export function ChatInterface() {
 
         <div className="soft-divider border-t px-4 py-4 sm:px-6">
           <form onSubmit={handleSubmit} className="mx-auto max-w-4xl">
-            <div className="rounded-[22px] border border-slate-200 bg-white px-3 py-2 shadow-[0_10px_30px_rgba(148,163,184,0.14)]">
+            <div className="rounded-[22px] border border-slate-700 bg-slate-950/90 px-3 py-2 shadow-[0_12px_32px_rgba(2,6,23,0.35)]">
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setShowFileUpload(!showFileUpload)}
-                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-100"
                   aria-label={showFileUpload ? 'Hide file upload' : 'Show file upload'}
                 >
                   {showFileUpload ? <Paperclip className="h-[18px] w-[18px]" /> : <Plus className="h-[18px] w-[18px]" />}
@@ -298,7 +298,7 @@ export function ChatInterface() {
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={handleKeyDown}
                     placeholder="Ask me anything about your loan..."
-                    className="max-h-40 w-full resize-none bg-transparent px-1 py-0 text-[15px] leading-[24px] text-slate-900 outline-none placeholder:text-slate-400"
+                    className="max-h-40 w-full resize-none bg-transparent px-1 py-0 text-[15px] leading-[24px] text-slate-100 outline-none placeholder:text-slate-500"
                     rows={1}
                     disabled={isLoading}
                   />
@@ -307,7 +307,7 @@ export function ChatInterface() {
                 <button
                   type="submit"
                   disabled={isLoading || (!input.trim() && pendingFiles.length === 0)}
-                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[16px] bg-gradient-to-br from-blue-600 to-sky-500 text-white transition hover:from-blue-700 hover:to-sky-600 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[16px] bg-gradient-to-br from-blue-600 to-sky-500 text-white transition hover:from-blue-700 hover:to-sky-600 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500"
                   aria-label="Send message"
                 >
                   {isLoading ? (

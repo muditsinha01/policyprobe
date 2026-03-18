@@ -67,13 +67,13 @@ export function FileUpload({ onFilesSelected }: FileUploadProps) {
         onChange={handleFileInput}
       />
       <label htmlFor="file-upload-input" className="cursor-pointer">
-        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-600">
+        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-800 text-slate-200">
           <Upload className="h-6 w-6" />
         </div>
-        <p className="mb-2 text-sm font-medium text-slate-800 sm:text-base">
+        <p className="mb-2 text-sm font-medium text-slate-100 sm:text-base">
           Drag and drop files here, or click to browse
         </p>
-        <p className="mx-auto mb-4 max-w-xl text-sm text-slate-500">
+        <p className="mx-auto mb-4 max-w-xl text-sm text-slate-400">
           Add a document to the conversation.
         </p>
         <div className="flex flex-wrap justify-center gap-4 text-xs text-slate-500">

@@ -3,9 +3,9 @@
 @tailwind utilities;
 
 :root {
-  --foreground-rgb: 17, 24, 39;
-  --background-start-rgb: 248, 250, 252;
-  --background-end-rgb: 241, 245, 249;
+  --foreground-rgb: 226, 232, 240;
+  --background-start-rgb: 9, 14, 26;
+  --background-end-rgb: 14, 20, 34;
 }
 
 * {
@@ -20,8 +20,8 @@ body {
   min-height: 100vh;
   color: rgb(var(--foreground-rgb));
   background:
-    radial-gradient(circle at top, rgba(59, 130, 246, 0.08), transparent 28%),
-    radial-gradient(circle at bottom right, rgba(148, 163, 184, 0.08), transparent 24%),
+    radial-gradient(circle at top, rgba(59, 130, 246, 0.16), transparent 28%),
+    radial-gradient(circle at bottom right, rgba(56, 189, 248, 0.08), transparent 24%),
     linear-gradient(180deg, rgb(var(--background-start-rgb)) 0%, rgb(var(--background-end-rgb)) 100%);
 }
 
@@ -30,12 +30,12 @@ body::before {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.45), transparent 24%);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 24%);
 }
 
 ::selection {
-  background: rgba(59, 130, 246, 0.18);
-  color: #0f172a;
+  background: rgba(59, 130, 246, 0.28);
+  color: #eff6ff;
 }
 
 /* Custom scrollbar for chat area */
@@ -48,14 +48,14 @@ body::before {
 }
 
 .chat-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.75);
+  background: rgba(100, 116, 139, 0.72);
   border-radius: 999px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 
 .chat-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(100, 116, 139, 0.85);
+  background: rgba(148, 163, 184, 0.85);
 }
 
 /* Message styling */
@@ -66,18 +66,18 @@ body::before {
 }
 
 .message-content code {
-  background-color: #e2e8f0;
+  background-color: rgba(15, 23, 42, 0.88);
   padding: 0.2em 0.4em;
   border-radius: 0.4rem;
   font-size: 0.9em;
 }
 
 .message-content pre {
-  background-color: #e2e8f0;
+  background-color: rgba(15, 23, 42, 0.92);
   padding: 1em;
   border-radius: 0.9rem;
   overflow-x: auto;
-  border: 1px solid rgba(148, 163, 184, 0.35);
+  border: 1px solid rgba(71, 85, 105, 0.7);
 }
 
 /* Error styling */
@@ -90,23 +90,23 @@ body::before {
 
 /* File upload styling */
 .file-upload-zone {
-  border: 1px dashed rgba(148, 163, 184, 0.7);
-  background: #ffffff;
+  border: 1px dashed rgba(71, 85, 105, 0.9);
+  background: rgba(15, 23, 42, 0.86);
   transition: all 0.2s ease;
 }
 
 .file-upload-zone:hover,
 .file-upload-zone.drag-over {
-  border-color: rgba(59, 130, 246, 0.55);
-  background-color: rgba(59, 130, 246, 0.04);
+  border-color: rgba(56, 189, 248, 0.55);
+  background-color: rgba(14, 165, 233, 0.08);
 }
 
 .glass-panel {
-  background: rgba(255, 255, 255, 0.88);
-  border: 1px solid rgba(203, 213, 225, 0.9);
+  background: rgba(10, 16, 29, 0.86);
+  border: 1px solid rgba(51, 65, 85, 0.95);
   box-shadow:
-    0 18px 48px rgba(148, 163, 184, 0.18),
-    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    0 18px 48px rgba(2, 6, 23, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
   backdrop-filter: blur(14px);
 }
 
@@ -115,7 +115,7 @@ body::before {
 }
 
 .soft-divider {
-  border-color: rgba(203, 213, 225, 0.85);
+  border-color: rgba(51, 65, 85, 0.95);
 }
 
 .fade-in-up {
