@@ -17,7 +17,7 @@ from .tech_support import TechSupportAgent
 from .finance import FinanceAgent
 from .file_processor import FileProcessorAgent
 from .auth.agent_auth import AgentAuthenticator, AgentIdentity
-from llm.openrouter import OpenRouterClient
+from llm.bedrock import BedrockClient
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +67,7 @@ class AgentOrchestrator:
     TOKEN_TTL_SECONDS = 300
 
     def __init__(self):
-        self.llm_client = OpenRouterClient()
+        self.llm_client = BedrockClient()
         self.authenticator = AgentAuthenticator()
 
         # Initialize agents

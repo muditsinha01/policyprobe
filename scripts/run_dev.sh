@@ -23,10 +23,19 @@ source "$PROJECT_ROOT/scripts/python_helper.sh"
 echo ""
 
 # Check for required environment variables
-if [ -z "$OPENROUTER_API_KEY" ]; then
-    echo "WARNING: OPENROUTER_API_KEY not set"
-    echo "The LLM features will not work without it."
-    echo "Set it with: export OPENROUTER_API_KEY=your_key_here"
+if [ -z "$AWS_REGION" ] && [ -z "$AWS_DEFAULT_REGION" ]; then
+    echo "WARNING: AWS_REGION/AWS_DEFAULT_REGION not set"
+    echo "The LLM features will not work without an AWS region."
+    echo "Set it with: export AWS_REGION=us-west-2"
+    echo ""
+fi
+
+if [ -z "$AWS_ACCESS_KEY_ID" ] && [ -z "$AWS_PROFILE" ] && [ ! -d "$HOME/.aws" ]; then
+    echo "WARNING: AWS credentials were not detected"
+    echo "The LLM features will not work without AWS credentials for Bedrock."
+    echo "Set them with your usual AWS auth flow, for example:"
+    echo "  export AWS_ACCESS_KEY_ID=your_access_key"
+    echo "  export AWS_SECRET_ACCESS_KEY=your_secret_key"
     echo ""
 fi
 

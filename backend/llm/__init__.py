@@ -1,9 +1,9 @@
 """
 LLM Client Module
 
-Provides clients for LLM communication via OpenRouter.
+Provides clients for LLM communication via Amazon Bedrock.
 """
 
-from .openrouter import OpenRouterClient
+from .bedrock import BedrockClient
 
-__all__ = ["OpenRouterClient"]
+__all__ = ["BedrockClient"]

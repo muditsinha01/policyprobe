@@ -24,7 +24,7 @@ Acme Loan Assistant is a deliberately vulnerable chat agent application designed
 
 ### Option A: Docker (recommended)
 
-**Prerequisites:** Docker, OpenRouter API key ([get one here](https://openrouter.ai/keys))
+**Prerequisites:** Docker, AWS credentials with Amazon Bedrock access, and an AWS region with Bedrock enabled
 
 1. **Build the image**
 
@@ -38,15 +38,15 @@ docker build -t policyprobe:local .
 docker run -d \
   --name policyprobe \
   -p 80:5001 \
-  -e OPENROUTER_API_KEY=your_key_here \
-  -e OPENROUTER_MODEL=meta-llama/llama-3.3-70b-instruct:free \
+  -e AWS_REGION=us-west-2 \
+  -e AWS_ACCESS_KEY_ID=your_access_key \
+  -e AWS_SECRET_ACCESS_KEY=your_secret_key \
+  -e BEDROCK_MODEL_ID=amazon.nova-micro-v1:0 \
   -e AGENT_SECRET=your_random_secret \
   policyprobe:local
 ```
 
 3. **Open the app** at http://localhost (Acme Loan Assistant interface)
-
-> **Free model note:** If you get 429 errors, switch models via `OPENROUTER_MODEL` or add a payment method at [openrouter.ai/settings/billing](https://openrouter.ai/settings/billing).
 
 ---
 
@@ -56,7 +56,8 @@ docker run -d \
 
 - Node.js 18+
 - Python 3.10+
-- OpenRouter API key (get one at https://openrouter.ai/keys)
+- AWS credentials with Amazon Bedrock access
+- `AWS_REGION` or `AWS_DEFAULT_REGION`
 
 ### Setup
 
@@ -67,7 +68,7 @@ cd policyprobe
 
 # Copy environment template
 cp .env.example .env
-# Edit .env and add your OPENROUTER_API_KEY
+# Edit .env and add your AWS Bedrock settings
 ```
 
 2. **Create virtual environment and install dependencies**
@@ -235,8 +236,8 @@ python scripts/create_test_files.py
               ┌─────────────┼─────────────┐
               ▼             ▼             ▼
          ┌────────┐   ┌──────────┐   ┌─────────┐
-         │OpenRouter│  │  Policy  │   │  File   │
-         │ (LLM)  │   │ Modules  │   │ Parsers │
+         │ Bedrock │   │  Policy  │   │  File   │
+         │  (LLM)  │   │ Modules  │   │ Parsers │
          └────────┘   └──────────┘   └─────────┘
 ```
 
@@ -244,12 +245,19 @@ python scripts/create_test_files.py
 
 | Variable | Description | Required | Default |
 |----------|-------------|----------|---------|
-| `OPENROUTER_API_KEY` | OpenRouter API key for LLM access | **Yes** | — |
-| `OPENROUTER_MODEL` | Model slug to use | No | `meta-llama/llama-3.3-70b-instruct:free` |
+| `AWS_REGION` | AWS region for Amazon Bedrock Runtime | Yes* | — |
+| `AWS_DEFAULT_REGION` | Alternate AWS region variable used by boto3 | No | — |
+| `AWS_ACCESS_KEY_ID` | AWS access key for Amazon Bedrock | Yes* | — |
+| `AWS_SECRET_ACCESS_KEY` | AWS secret key for Amazon Bedrock | Yes* | — |
+| `AWS_SESSION_TOKEN` | AWS session token for temporary credentials | No | — |
+| `AWS_PROFILE` | Named AWS profile for local development | No | — |
+| `BEDROCK_MODEL_ID` | Amazon Bedrock model ID to use | No | `amazon.nova-micro-v1:0` |
 | `AGENT_SECRET` | Secret for HMAC inter-agent token signing | No | — |
 | `JWT_SECRET` | Secret for JWT signing (after Unifai remediation) | No | — |
 | `BACKEND_URL` | Backend URL for frontend proxy | No | `http://127.0.0.1:5500` |
 | `LOG_LEVEL` | Logging verbosity | No | `INFO` |
+
+\* Provide AWS credentials through environment variables, `AWS_PROFILE`, or another standard boto3 credential source.
 
 ## License
 

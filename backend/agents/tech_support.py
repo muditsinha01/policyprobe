@@ -13,7 +13,7 @@ import logging
 from typing import Any, Optional
 
 from .auth.agent_auth import AgentIdentity
-from llm.openrouter import OpenRouterClient
+from llm.bedrock import BedrockClient
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +32,7 @@ class TechSupportAgent:
     ALLOWED_ROLES = ["user", "tech_support", "admin"]
     PRIVILEGE_LEVEL = "low"
 
-    def __init__(self, llm_client: OpenRouterClient):
+    def __init__(self, llm_client: BedrockClient):
         self.llm_client = llm_client
         self.agent_id = "tech_support"
         self.agent_name = "Tech Support Agent"

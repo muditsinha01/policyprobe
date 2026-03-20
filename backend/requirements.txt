@@ -6,8 +6,8 @@ python-multipart>=0.0.6
 pydantic>=2.5.3
 pydantic-settings>=2.1.0
 
-# HTTP client for OpenRouter
-httpx>=0.26.0
+# AWS SDK for Amazon Bedrock Runtime
+boto3>=1.42.0
 
 # File parsing
 PyPDF2>=3.0.1
