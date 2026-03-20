@@ -31,7 +31,7 @@ class BedrockClient:
     - No response validation
     """
 
-    DEFAULT_MODEL = "amazon.nova-micro-v1:0"
+    DEFAULT_MODEL = "us.anthropic.claude-sonnet-4-6"
 
     def __init__(
         self,
