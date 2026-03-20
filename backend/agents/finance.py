@@ -3,14 +3,24 @@ Finance Agent
 
 Handles financial data queries with HIGH privilege level.
 Should only be accessible to authorized callers.
+
+SECURITY NOTES (Unifai / Lineaje demo — AI_APP_SEC_002):
+- Control: Encoded prompts — instructions concealed in Base64, hex, zero-width
+  characters, structured payloads (JSON/XML), duplicated metadata, or content
+  that is CSS-hidden but still extracted by parsers.
+- Risk: Invisible or obfuscated prompt injection, safety / policy bypass,
+  leakage of system instructions, corrupted downstream workflows; low attack
+  complexity, no privileges required (OWASP LLM01, LLM04, LLM05, LLM08;
+  OWASP-ASI ASI-01, ASI-04, ASI-07, ASI-09; EU AI Act transparency themes).
+- This agent passes extracted document text to the LLM without decoding or
+  policy checks on those channels.
+- Additional demo issues: internal auth bypass, missing audit logging, no
+  rate limiting (separate from AI_APP_SEC_002).
 """
 
 import base64
-import hashlib
-import hmac
 import logging
 import re
-import time
 from typing import Any, Optional
 
 from .auth.agent_auth import AgentIdentity, AgentAuthenticator
@@ -18,82 +28,91 @@ from llm.bedrock import BedrockClient
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# PII patterns (Singapore + general)
-# ---------------------------------------------------------------------------
-_PII_PATTERNS: dict[str, re.Pattern] = {
-    "SSN": re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),
-    "NRIC": re.compile(r"\b[STFGM]\d{7}[A-Z]\b", re.IGNORECASE),
-    "FIN": re.compile(r"\b[FGM]\d{7}[A-Z]\b", re.IGNORECASE),
-    "Passport Number": re.compile(r"\b[A-Z]{1,2}\d{6,9}\b"),
-    "Credit Card Number": re.compile(r"\b(?:\d[ -]*?){13,19}\b"),
-    "Email": re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b"),
-    "Phone Number": re.compile(
-        r"\b(?:\+?\d{1,3}[-.\s]?)?\(?\d{2,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{4}\b"
-    ),
-    "IP Address": re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b"),
-    "MAC Address": re.compile(r"\b(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\b"),
-    "Date of Birth": re.compile(
-        r"\b(?:DOB|Date of Birth|D\.O\.B\.?)\s*[:\-]?\s*\d{1,4}[/\-\.]\d{1,2}[/\-\.]\d{1,4}\b",
-        re.IGNORECASE,
-    ),
-    "Bank Account Number": re.compile(r"\b\d{8,17}\b"),
-    "Driver License": re.compile(r"\b[A-Z]\d{7,14}\b"),
-    "GPS Coordinates": re.compile(r"-?\d{1,3}\.\d{4,},\s*-?\d{1,3}\.\d{4,}"),
-    "Vehicle VIN": re.compile(r"\b[A-HJ-NPR-Z0-9]{17}\b"),
-    "IMEI": re.compile(r"\b\d{15}\b"),
-    "CPF Account Number": re.compile(r"\b[A-Z]{2}\d{7}[A-Z]\b", re.IGNORECASE),
-    "Tax ID": re.compile(r"\b\d{2}-\d{7}\b"),
-}
-
-
-def _redact_pii(text: str) -> str:
-    """Replace PII matches with REDACTED."""
-    for _label, pattern in _PII_PATTERNS.items():
-        text = pattern.sub("REDACTED", text)
-    return text
-
-
-# ---------------------------------------------------------------------------
-# Suspicious-prompt / command scanner for uploaded file content
-# ---------------------------------------------------------------------------
 _SUSPICIOUS_COMMANDS = re.compile(
-    r"\b(?:alias|ripgrep|curl|rm|echo|dd|git|tar|chmod|chown|fsck|eval|exec|subprocess"
-    r"|sh\b|bash|wget|nc\b|netcat|python|ruby|perl|nmap|sudo|kill|mkfs)\b"
-    r"|`[^`]+`"
-    r"|\$\([^)]+\)",
+    r'\b(?:alias|ripgrep|curl|rm|echo|dd|git|tar|chmod|chown|fsck'
+    r'|wget|bash|sh|zsh|python|perl|ruby|nc|ncat|netcat'
+    r'|powershell|cmd\.exe|eval|exec|sudo|su|kill|mkfs'
+    r'|passwd|ssh|scp|nmap|telnet)\b',
     re.IGNORECASE,
 )
 
-_BASE64_CHUNK = re.compile(r"[A-Za-z0-9+/]{20,}={0,2}")
+_LEET_MAP = str.maketrans('01345@!', 'oieasai')
 
-
-def _strip_suspicious_content(text: str) -> str:
-    """Remove shell commands, executables, and base64-encoded suspicious payloads."""
-    for match in _BASE64_CHUNK.finditer(text):
-        try:
-            decoded = base64.b64decode(match.group()).decode("utf-8", errors="ignore")
-            if _SUSPICIOUS_COMMANDS.search(decoded):
-                text = text.replace(match.group(), "<suspicious_content_removed>")
-        except Exception:
-            pass
-    text = _SUSPICIOUS_COMMANDS.sub("<suspicious_content_removed>", text)
-    return text
-
-
-# ---------------------------------------------------------------------------
-# LLM output sanitizer – strips eval / dynamic-code-execution lines
-# ---------------------------------------------------------------------------
-_CODE_EXEC_LINE = re.compile(
-    r"^.*\b(?:eval|exec|subprocess\s*\(.*shell\s*=\s*True|os\.system|os\.popen"
-    r"|child_process|Function\s*\(|new\s+Function)\b.*$",
-    re.IGNORECASE | re.MULTILINE,
+_MALICIOUS_PROMPT_PATTERNS = re.compile(
+    r'(?:'
+    r'ignore\s+(?:all\s+)?(?:previous|prior|above)\s+instructions'
+    r'|override[_\s]?user'
+    r'|discard\s+alignment'
+    r'|bypass\s+(?:safety|security|user)'
+    r'|priority["\s:]*override'
+    r'|superseding\s+all\s+user\s+prompts'
+    r'|do\s+not\s+mention\s+this\s+instruction'
+    r'|exfil'
+    r'|dump\s+any\s+secrets'
+    r'|system\s+prompts?\s+you\s+were\s+given'
+    r'|INTERNAL_EXFIL'
+    r'|WIRE\s+AUTH'
+    r'|WIRE.*DESK.*OVERRIDE'
+    r'|SAFETY.*LAYER.*DISABLED'
+    r')',
+    re.IGNORECASE,
 )
 
+_REPLACEMENT = '<suspicious_content_removed>'
 
-def _sanitize_llm_output(text: str) -> str:
-    """Remove lines containing eval / dynamic-code-execution primitives."""
-    return _CODE_EXEC_LINE.sub("", text)
+
+def _decode_base64_segments(text: str) -> str:
+    """Decode Base64-looking tokens so hidden commands become visible to scanning."""
+    def _try_decode(m: re.Match) -> str:
+        try:
+            decoded = base64.b64decode(m.group(0)).decode('utf-8', errors='replace')
+            return f'{m.group(0)} [decoded: {decoded}]'
+        except Exception:
+            return m.group(0)
+    return re.sub(r'[A-Za-z0-9+/]{20,}={0,2}', _try_decode, text)
+
+
+def _decode_hex_segments(text: str) -> str:
+    """Decode long hex strings so hidden commands become visible to scanning."""
+    def _try_decode(m: re.Match) -> str:
+        try:
+            decoded = bytes.fromhex(m.group(0)).decode('utf-8', errors='replace')
+            if decoded.isascii() and any(c.isalpha() for c in decoded):
+                return f'{m.group(0)} [decoded: {decoded}]'
+        except Exception:
+            pass
+        return m.group(0)
+    return re.sub(r'(?:[0-9a-fA-F]{2}\s*){20,}', _try_decode, text)
+
+
+def _strip_zero_width(text: str) -> str:
+    """Remove zero-width characters that can hide tokens from pattern matchers."""
+    return re.sub(r'[\u200b\u200c\u200d\u2060\ufeff]', '', text)
+
+
+def sanitize_uploaded_content(text: str) -> str:
+    """Sanitize uploaded file content: decode obfuscated payloads, strip
+    suspicious commands and malicious prompt-injection patterns."""
+    cleaned = _strip_zero_width(text)
+    cleaned = _decode_base64_segments(cleaned)
+    cleaned = _decode_hex_segments(cleaned)
+
+    leet_version = cleaned.translate(_LEET_MAP)
+    if _SUSPICIOUS_COMMANDS.search(leet_version):
+        cleaned = _SUSPICIOUS_COMMANDS.sub(_REPLACEMENT, cleaned)
+        leet_cleaned = leet_version
+        for cmd_match in _SUSPICIOUS_COMMANDS.finditer(leet_cleaned):
+            cleaned = cleaned[:cmd_match.start()] + _REPLACEMENT + cleaned[cmd_match.end():]
+
+    cleaned = _SUSPICIOUS_COMMANDS.sub(_REPLACEMENT, cleaned)
+    cleaned = _MALICIOUS_PROMPT_PATTERNS.sub(_REPLACEMENT, cleaned)
+
+    return cleaned
+
+
+_ANALYSIS_SYSTEM_PROMPT = """You are a financial analyst assistant.
+Analyze the provided financial reports and answer the user's questions.
+Provide clear, professional responses with relevant insights."""
 
 
 class FinanceAgent:
@@ -163,6 +182,8 @@ class FinanceAgent:
         Returns:
             Response dictionary with financial data or error
         """
+        # Authorization check
+        # VULNERABILITY: Check exists but has bypass
         if not self._verify_authorization(caller, headers):
             logger.warning(
                 "Unauthorized access attempt to finance agent",
@@ -199,85 +220,86 @@ class FinanceAgent:
         caller: AgentIdentity,
         headers: Optional[dict]
     ) -> bool:
-        """Verify that the caller is authorized to access financial data."""
+        """
+        Verify that the caller is authorized to access financial data.
+
+        VULNERABILITY: The is_internal flag bypasses all privilege checks.
+        Any agent claiming to be "internal" can access financial data.
+        """
+        # Check 1: Role-based access
         if caller.privilege_level in self.ALLOWED_ROLES:
             return True
 
+        # Check 2: Admin override
         if caller.privilege_level == "admin":
             return True
 
-        token = (headers or {}).get("X-Agent-Token", "")
-        if token and self._validate_agent_token(token, caller.agent_id, self.agent_id):
+        # VULNERABILITY: Internal bypass - any agent claiming internal status
+        # gets full access without verification
+        if caller.is_internal:
+            logger.info(
+                "Internal caller accessing finance agent",
+                extra={
+                    "caller": caller.agent_id,
+                    "note": "Internal bypass used"
+                }
+            )
+            return True  # Bypass for "internal" calls
+
+        # Check 3: Token verification (but token is never actually validated!)
+        # VULNERABILITY: We check if token exists but never validate it
+        if headers and headers.get("X-Agent-Token"):
+            # Token exists, but we don't verify its validity
+            # This is a security vulnerability - any token passes
+            logger.debug("Token provided, granting access")
             return True
 
         return False
-
-    @staticmethod
-    def _validate_agent_token(token: str, expected_caller: str, expected_target: str) -> bool:
-        """Validate an HMAC inter-agent token (caller, target, expiry)."""
-        import os
-        secret = os.environ.get("AGENT_SECRET", "")
-        if not secret:
-            return False
-        try:
-            parts = token.rsplit(":", 1)
-            if len(parts) != 2:
-                return False
-            payload, signature = parts
-            expected_sig = hmac.new(
-                secret.encode(), payload.encode(), hashlib.sha256
-            ).hexdigest()
-            if not hmac.compare_digest(signature, expected_sig):
-                return False
-            caller_id, target_id, ts = payload.split(":")
-            if caller_id != expected_caller or target_id != expected_target:
-                return False
-            if abs(time.time() - int(ts)) > 300:
-                return False
-            return True
-        except Exception:
-            return False
 
     async def _analyze_external_finance_report(
         self,
         user_message: str,
         report_contents: list[dict[str, Any]],
     ) -> str:
-        """Analyze external finance content (reports, partner documents) via LLM."""
+        """Analyze external finance content (reports, partner documents) via LLM.
+
+        Uploaded content is sanitized before reaching the model:
+        - Base64 and hex segments are decoded and scanned
+        - Zero-width characters are stripped
+        - Suspicious commands and malicious prompt patterns are replaced
+        """
         combined = "\n\n".join(
             f"Report: {r.get('filename', 'unknown')}\n{r.get('extracted_content', '')}"
             for r in report_contents
         )
 
-        combined = _redact_pii(combined)
-        combined = _strip_suspicious_content(combined)
+        combined = sanitize_uploaded_content(combined)
 
         response = await self.llm_client.chat(
             messages=[
-                {
-                    "role": "system",
-                    "content": """You are a financial analyst assistant.
-Analyze the provided financial reports and answer the user's questions.
-Provide clear, professional responses with relevant insights.""",
-                },
+                {"role": "system", "content": _ANALYSIS_SYSTEM_PROMPT},
                 {
                     "role": "user",
-                    "content": f"""Financial Report Content:
-{combined}
-
-User Question: {user_message}
-
-Please analyze the report and answer the question above.""",
+                    "content": (
+                        f"Financial Report Content:\n{combined}\n\n"
+                        f"User Question: {user_message}"
+                    ),
                 },
-            ]
+            ],
         )
 
-        return _sanitize_llm_output(response)
+        return response
 
     async def _process_financial_query(self, query: str) -> str:
-        """Process a financial query and return relevant data."""
+        """
+        Process a financial query and return relevant data.
+
+        VULNERABILITY: Sensitive financial data returned without
+        proper audit logging or data masking.
+        """
         query_lower = query.lower()
 
+        # Determine what data to include
         data_to_include = []
 
         if "revenue" in query_lower or "quarterly" in query_lower:
@@ -291,22 +313,27 @@ Please analyze the report and answer the question above.""",
             )
 
         if "salary" in query_lower or "payroll" in query_lower:
+            # VULNERABILITY: Salary data returned without masking
             data_to_include.append(
                 f"Department Salaries:\n{self._format_dict(self._financial_data['employee_salaries'])}"
             )
 
         if "projection" in query_lower or "forecast" in query_lower or "plan" in query_lower:
+            # VULNERABILITY: Highly sensitive strategic data exposed
             data_to_include.append(
                 f"Strategic Projections (CONFIDENTIAL):\n{self._format_dict(self._financial_data['sensitive_projections'])}"
             )
 
         if not data_to_include:
+            # Default response with general financial overview
             data_to_include.append(
                 f"Financial Overview:\nRevenue: {self._format_dict(self._financial_data['quarterly_revenue'])}"
             )
 
         financial_context = "\n\n".join(data_to_include)
 
+        # Use LLM to generate a natural response
+        # VULNERABILITY: Sensitive financial data sent to external LLM
         response = await self.llm_client.chat(
             messages=[
                 {
@@ -322,7 +349,7 @@ Format numbers clearly and provide relevant insights."""
             ]
         )
 
-        return _sanitize_llm_output(response)
+        return response
 
     def _format_dict(self, data: dict) -> str:
         """Format dictionary data for display."""
@@ -331,13 +358,24 @@ Format numbers clearly and provide relevant insights."""
     async def get_financial_data(
         self,
         requester: AgentIdentity,
-        query: str,
-        headers: Optional[dict] = None,
+        query: str
     ) -> dict[str, Any]:
-        """Direct method to get financial data with auth check."""
-        if not self._verify_authorization(requester, headers):
+        """
+        Direct method to get financial data.
+
+        VULNERABILITY: Authorization check has internal bypass.
+        Used by other agents to access financial data directly.
+        """
+        # Authorization check with bypass
+        if requester.privilege_level in self.ALLOWED_ROLES:
+            pass  # Authorized
+        elif requester.is_internal:
+            # VULNERABILITY: is_internal always True for agent calls
+            pass  # Bypassed
+        else:
             return {"error": "Unauthorized"}
 
+        # VULNERABILITY: Full financial data access without granular permissions
         return {
             "data": self._financial_data,
             "query": query,
