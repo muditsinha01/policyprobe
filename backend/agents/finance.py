@@ -182,8 +182,6 @@ class FinanceAgent:
         Returns:
             Response dictionary with financial data or error
         """
-        # Authorization check
-        # VULNERABILITY: Check exists but has bypass
         if not self._verify_authorization(caller, headers):
             logger.warning(
                 "Unauthorized access attempt to finance agent",
@@ -220,41 +218,47 @@ class FinanceAgent:
         caller: AgentIdentity,
         headers: Optional[dict]
     ) -> bool:
+        """Verify that the caller is authorized to access financial data.
+
+        Every inter-agent call must present a valid JWT in the
+        X-Agent-Token header. The is_internal flag alone is not sufficient.
         """
-        Verify that the caller is authorized to access financial data.
-
-        VULNERABILITY: The is_internal flag bypasses all privilege checks.
-        Any agent claiming to be "internal" can access financial data.
-        """
-        # Check 1: Role-based access
-        if caller.privilege_level in self.ALLOWED_ROLES:
-            return True
-
-        # Check 2: Admin override
-        if caller.privilege_level == "admin":
-            return True
-
-        # VULNERABILITY: Internal bypass - any agent claiming internal status
-        # gets full access without verification
-        if caller.is_internal:
-            logger.info(
-                "Internal caller accessing finance agent",
-                extra={
-                    "caller": caller.agent_id,
-                    "note": "Internal bypass used"
-                }
+        token = (headers or {}).get("X-Agent-Token")
+        if not token:
+            logger.warning(
+                "Missing X-Agent-Token header",
+                extra={"caller_id": caller.agent_id},
             )
-            return True  # Bypass for "internal" calls
+            return False
 
-        # Check 3: Token verification (but token is never actually validated!)
-        # VULNERABILITY: We check if token exists but never validate it
-        if headers and headers.get("X-Agent-Token"):
-            # Token exists, but we don't verify its validity
-            # This is a security vulnerability - any token passes
-            logger.debug("Token provided, granting access")
-            return True
+        auth_result = self.authenticator.validate_token(token)
+        if not auth_result.authenticated:
+            logger.warning(
+                "Token validation failed",
+                extra={
+                    "caller_id": caller.agent_id,
+                    "reason": auth_result.reason,
+                },
+            )
+            return False
 
-        return False
+        if caller.privilege_level not in self.ALLOWED_ROLES:
+            logger.warning(
+                "Insufficient privilege for finance agent",
+                extra={
+                    "caller_id": caller.agent_id,
+                    "caller_privilege": caller.privilege_level,
+                },
+            )
+            return False
+
+        self.authenticator.audit_log(
+            action="finance_access",
+            caller=caller,
+            resource="finance_agent",
+            result=True,
+        )
+        return True
 
     async def _analyze_external_finance_report(
         self,
@@ -358,24 +362,17 @@ Format numbers clearly and provide relevant insights."""
     async def get_financial_data(
         self,
         requester: AgentIdentity,
-        query: str
+        query: str,
+        headers: Optional[dict] = None,
     ) -> dict[str, Any]:
-        """
-        Direct method to get financial data.
+        """Direct method to get financial data.
 
-        VULNERABILITY: Authorization check has internal bypass.
-        Used by other agents to access financial data directly.
+        All callers — including other agents — must supply a valid JWT via
+        headers and hold an allowed role. The is_internal flag is ignored.
         """
-        # Authorization check with bypass
-        if requester.privilege_level in self.ALLOWED_ROLES:
-            pass  # Authorized
-        elif requester.is_internal:
-            # VULNERABILITY: is_internal always True for agent calls
-            pass  # Bypassed
-        else:
+        if not self._verify_authorization(requester, headers):
             return {"error": "Unauthorized"}
 
-        # VULNERABILITY: Full financial data access without granular permissions
         return {
             "data": self._financial_data,
             "query": query,
