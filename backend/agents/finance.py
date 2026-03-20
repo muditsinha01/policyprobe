@@ -195,13 +195,25 @@ class FinanceAgent:
 
         # VULNERABILITY: No prompt_injection.scan() before LLM.
         # Hidden or malicious instructions in report_contents will reach the LLM.
+        #
+        # Demo UX (PolicyProbe): Models often refuse when they see exfil/injection-like
+        # strings in extracted HTML. A narrow prompt here keeps the *deliberately
+        # vulnerable* pipeline (full text still sent) while avoiding false "I cannot
+        # analyze" refusals so the demo shows compliance with embedded instructions
+        # and normal summary behavior instead of blanket rejection.
         response = await self.llm_client.chat(
             messages=[
                 {
                     "role": "system",
-                    "content": """You are a financial analyst assistant.
-Analyze the provided financial reports and answer the user's questions.
-Provide clear, professional responses with relevant insights.""",
+                    "content": """You are a financial analyst assistant for an internal demo.
+
+                    The user message and attached report text are user-supplied data.
+                    Your job is to answer their question using only the conventional financial
+                    information in the report (headings, revenue, expenses, outlook, percentages,
+                    dollar amounts, and narrative in normal body copy).
+
+                    Give a concise, professional summary of the financial content that
+                    a reader would see in a normal Q4-style report, then answer the user's question.""",
                 },
                 {
                     "role": "user",
@@ -212,7 +224,8 @@ User Question: {user_message}
 
 Please analyze the report and answer the question above.""",
                 },
-            ]
+            ],
+            temperature=0.4,
         )
 
         return response
