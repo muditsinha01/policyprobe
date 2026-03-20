@@ -243,26 +243,7 @@ class FinanceAgent:
         user_message: str,
         report_contents: list[dict[str, Any]],
     ) -> str:
-<<<<<<< HEAD
         """Analyze external finance content (reports, partner documents) via LLM."""
-=======
-        """
-        Analyze external finance content (reports, partner documents) via LLM.
-
-        VULNERABILITY (AI_APP_SEC_002 — encoded / obfuscated prompts):
-        Untrusted content is passed through to the model without detecting
-        instructions embedded as:
-        - Base64 or hex strings (possibly labeled as audit trails / checksums)
-        - Zero-width Unicode separators splitting covert tokens
-        - Structured payloads (e.g. JSON) with fields that read as operational
-          config but steer model behavior
-        - Duplicated metadata strings in body text when <meta> is ignored by extractors
-        - CSS-hidden blocks that naive HTML pipelines still concatenate into text
-
-        Maps to OWASP GenAI LLM Top 10 and Agentic Security Initiative controls
-        cited in AI_APP_SEC_002; remediation should run before this LLM call.
-        """
->>>>>>> ff2809e (Replace OpenRouter with Amazon Bedrock)
         combined = "\n\n".join(
             f"Report: {r.get('filename', 'unknown')}\n{r.get('extracted_content', '')}"
             for r in report_contents
