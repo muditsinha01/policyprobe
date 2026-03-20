@@ -24,7 +24,7 @@ Acme Loan Assistant is a deliberately vulnerable chat agent application designed
 
 ### Option A: Docker (recommended)
 
-**Prerequisites:** Docker, AWS credentials with Amazon Bedrock access, and an AWS region with Bedrock enabled
+**Prerequisites:** Docker, an AWS region with Bedrock enabled, and either an IAM role attached to the host (recommended for EC2) or AWS credentials
 
 1. **Build the image**
 
@@ -39,8 +39,6 @@ docker run -d \
   --name policyprobe \
   -p 80:5001 \
   -e AWS_REGION=us-west-2 \
-  -e AWS_ACCESS_KEY_ID=your_access_key \
-  -e AWS_SECRET_ACCESS_KEY=your_secret_key \
   -e BEDROCK_MODEL_ID=amazon.nova-micro-v1:0 \
   -e AGENT_SECRET=your_random_secret \
   policyprobe:local
@@ -247,8 +245,8 @@ python scripts/create_test_files.py
 |----------|-------------|----------|---------|
 | `AWS_REGION` | AWS region for Amazon Bedrock Runtime | Yes* | — |
 | `AWS_DEFAULT_REGION` | Alternate AWS region variable used by boto3 | No | — |
-| `AWS_ACCESS_KEY_ID` | AWS access key for Amazon Bedrock | Yes* | — |
-| `AWS_SECRET_ACCESS_KEY` | AWS secret key for Amazon Bedrock | Yes* | — |
+| `AWS_ACCESS_KEY_ID` | AWS access key (not needed when using IAM role) | No | — |
+| `AWS_SECRET_ACCESS_KEY` | AWS secret key (not needed when using IAM role) | No | — |
 | `AWS_SESSION_TOKEN` | AWS session token for temporary credentials | No | — |
 | `AWS_PROFILE` | Named AWS profile for local development | No | — |
 | `BEDROCK_MODEL_ID` | Amazon Bedrock model ID to use | No | `amazon.nova-micro-v1:0` |
