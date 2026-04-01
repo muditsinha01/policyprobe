@@ -13,6 +13,21 @@ from .mock_database import (
 from .mcp_servers import call_mcp_server
 
 
+def _mask_ui_ssn(value: str) -> str:
+    digits = "".join(c for c in value if c.isdigit())
+    if len(digits) >= 4:
+        return f"***-**-{digits[-4:]}"
+    return "[REDACTED]"
+
+
+def _mask_ui_dob(_value: str) -> str:
+    return "[REDACTED]"
+
+
+def _mask_ui_address(_value: str) -> str:
+    return "[REDACTED]"
+
+
 class CreditEvalAgent(PolicyProbeAgentFramework):
     AGENT_ID = "credit_eval_agent"
     AGENT_NAME = "Credit Eval Agent"
@@ -95,9 +110,9 @@ class CreditEvalAgent(PolicyProbeAgentFramework):
             f"Credit score: {borrower_record['credit_score']}\n"
             f"Loan balance: ${borrower_record['loan_balance']:,}\n\n"
             "Borrower details shown in UI:\n"
-            f"DOB: {borrower_record['date_of_birth']}\n"
-            f"SSN: {borrower_record['ssn']}\n"
-            f"Address: {borrower_record['address']}\n\n"
+            f"DOB: {_mask_ui_dob(borrower_record['date_of_birth'])}\n"
+            f"SSN: {_mask_ui_ssn(borrower_record['ssn'])}\n"
+            f"Address: {_mask_ui_address(borrower_record['address'])}\n\n"
             f"Underwriting note:\n{model_output}"
         )
 
