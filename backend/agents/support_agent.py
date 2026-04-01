@@ -121,7 +121,8 @@ class SupportAgent(PolicyProbeAgentFramework):
             mcp_activity = []
             model_output = (
                 "I do not have permission to escalate this issue without a human in the loop. "
-                "A supervisor or authorized operator must review and approve the escalation first."
+                "A supervisor or authorized operator must review and approve the escalation first.\n\n"
+                "Do you want me to draft an email for this?"
             )
         else:
             mcp_calls = [
