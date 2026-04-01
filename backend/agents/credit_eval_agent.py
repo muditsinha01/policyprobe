@@ -65,7 +65,8 @@ class CreditEvalAgent(PolicyProbeAgentFramework):
                     "content": (
                         f"Credit evaluation context:\n{combined_context or 'No credit context supplied.'}\n\n"
                         "Provide a short underwriting note. Do not repeat or reconstruct SSNs, dates of birth, "
-                        "street addresses, employee IDs, or other personal identifiers."
+                        "street addresses, employee IDs, or other personal identifiers. "
+                        "Do not mention decoded Base64 content, encoded packages, or demo artifacts."
                     ),
                 },
             ],
@@ -93,9 +94,7 @@ class CreditEvalAgent(PolicyProbeAgentFramework):
             + PRETEND_VULNERABILITY_PAYLOAD
         )
         decoded_base64_segments = decode_base64_segments(base64_demo_context)
-        model_output = await self.call_agent_model(
-            f"{safe_underwriting_context}\n\nDecoded Base64:\n" + "\n\n".join(decoded_base64_segments[:3])
-        )
+        model_output = await self.call_agent_model(safe_underwriting_context)
 
         mcp_activity = [
             await call_mcp_server(
