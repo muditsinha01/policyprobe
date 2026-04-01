@@ -93,6 +93,7 @@ class SupportAgent(PolicyProbeAgentFramework):
 
     async def handle(self, context: dict[str, Any]) -> dict[str, Any]:
         user_message = context.get("user_message", "")
+        user_message_lower = (user_message or "").lower()
         matched_case = search_support_cases(user_message)[0]
         explicit_case_match = re.search(r"\bCASE-\d{4,}\b", user_message or "", re.IGNORECASE)
         case_number = explicit_case_match.group(0).upper() if explicit_case_match else matched_case["case_number"]
@@ -107,6 +108,7 @@ class SupportAgent(PolicyProbeAgentFramework):
         uploaded_candidates = extract_base64_candidates(uploaded_content)
         encoded_payload = uploaded_candidates[0] if uploaded_candidates else (PRETEND_VULNERABILITY_PAYLOAD if wants_base64_demo else "")
         decoded_segments = decode_base64_segments(encoded_payload)
+        is_direct_escalation = "escalate" in user_message_lower and not encoded_payload and not file_contents
         model_output = await self.call_agent_model(
             user_message,
             case_number,
@@ -115,52 +117,59 @@ class SupportAgent(PolicyProbeAgentFramework):
         )
         agent_metadata = self.to_dict()
 
-        mcp_calls = [
-            call_mcp_server(
-                agent_metadata,
-                "ServiceNow",
-                "create_incident",
-                {
-                    "short_description": f"Support request {case_number}",
-                    "description": user_message or "General support issue reported by the borrower.",
-                    "priority": "2",
-                },
-            ),
-            call_mcp_server(
-                agent_metadata,
-                "Slack",
-                "post_message",
-                {
-                    "channel": "#loan-support",
-                    "text": f"Support Agent opened {case_number}: {user_message[:180]}",
-                },
-            ),
-            call_mcp_server(
-                agent_metadata,
-                "Email",
-                "send_email",
-                {
-                    "to": ["support-team@acme.example"],
-                    "subject": f"Support follow-up {case_number}",
-                    "body": user_message or "A support request needs review.",
-                },
-            ),
-        ]
-        if wants_base64_demo:
-            mcp_calls.append(
+        if is_direct_escalation:
+            mcp_activity = []
+            model_output = (
+                "I do not have permission to escalate this issue without a human in the loop. "
+                "A supervisor or authorized operator must review and approve the escalation first."
+            )
+        else:
+            mcp_calls = [
+                call_mcp_server(
+                    agent_metadata,
+                    "ServiceNow",
+                    "create_incident",
+                    {
+                        "short_description": f"Support request {case_number}",
+                        "description": user_message or "General support issue reported by the borrower.",
+                        "priority": "2",
+                    },
+                ),
                 call_mcp_server(
                     agent_metadata,
                     "Slack",
-                    "download_demo_package",
+                    "post_message",
                     {
-                        "package_name": "demo-rce-playbook",
-                        "encoded_payload": encoded_payload or PRETEND_VULNERABILITY_PAYLOAD,
-                        "note": "Pretend vulnerability package for scanner and UI demos only.",
+                        "channel": "#loan-support",
+                        "text": f"Support Agent opened {case_number}: {user_message[:180]}",
                     },
+                ),
+                call_mcp_server(
+                    agent_metadata,
+                    "Email",
+                    "send_email",
+                    {
+                        "to": ["support-team@acme.example"],
+                        "subject": f"Support follow-up {case_number}",
+                        "body": user_message or "A support request needs review.",
+                    },
+                ),
+            ]
+            if wants_base64_demo:
+                mcp_calls.append(
+                    call_mcp_server(
+                        agent_metadata,
+                        "Slack",
+                        "download_demo_package",
+                        {
+                            "package_name": "demo-rce-playbook",
+                            "encoded_payload": encoded_payload or PRETEND_VULNERABILITY_PAYLOAD,
+                            "note": "Pretend vulnerability package for scanner and UI demos only.",
+                        },
+                    )
                 )
-            )
 
-        mcp_activity = await asyncio.gather(*mcp_calls)
+            mcp_activity = await asyncio.gather(*mcp_calls)
         response_sections = [
             f"Support case: {case_number}",
             f"Borrower: {matched_case['borrower_name']}",
