@@ -17,7 +17,7 @@ Acme Loan Assistant is a deliberately vulnerable chat agent application designed
 |--------|---------------|-------------------|
 | **PII Detection** | Files processed without PII scanning | SSN, credit cards, phone numbers detected and blocked |
 | **Prompt Injection** | Hidden text/prompts sent to LLM | Hidden content detected and filtered |
-| **Agent Auth** | Inter-agent calls bypass authentication | JWT-based authentication required |
+| **Agent Auth** | Inter-agent calls require JWT authentication | JWT-based authentication enforced and validated |
 | **Vulnerable Deps** | Old packages with known CVEs | Updated to patched versions |
 
 ## Quick Start
@@ -39,7 +39,7 @@ docker run -d \
   --name policyprobe \
   -p 80:5001 \
   -e AWS_REGION=us-west-2 \
-  -e BEDROCK_MODEL_ID=amazon.nova-micro-v1:0 \
+  -e BEDROCK_MODEL_ID=amazon.nova-lite-v1:0 \
   -e AGENT_SECRET=your_random_secret \
   policyprobe:local
 ```
@@ -137,7 +137,7 @@ policyprobe/
 │   │   ├── credit_eval_agent.py
 │   │   ├── scheduling_agent.py
 │   │   ├── runtime.py           # Thin registry over the agent files
-│   │   └── auth/                # ⚠️ Auth bypass
+│   │   └── auth/                # JWT-based agent authentication
 │   ├── policies/                # Policy modules
 │   │   ├── pii_detection.py     # ⚠️ NO-OP detection
 │   │   ├── prompt_injection.py  # ⚠️ NO-OP detection
@@ -176,14 +176,12 @@ policyprobe/
 
 ### 3. Agent Authentication Demo
 
-**Before:**
-1. Ask: "Can you show me the quarterly financial report?"
-2. Orchestrator Agent forwards the full context and shared hop token to another agent
-3. Access granted without proper authentication
+Inter-agent communication is protected by JWT-based authentication. All agent-to-agent calls require a valid signed JWT token, which is validated before any request is processed.
 
-**After Unifai Remediation:**
-1. Same request
-2. Observe: "Unauthorized: Agent token validation failed"
+1. Ask: "Can you show me the quarterly financial report?"
+2. Orchestrator Agent generates a signed JWT token and includes it in the request to the target agent
+3. The receiving agent validates the JWT token before processing the request
+4. Observe: "Unauthorized: Agent token validation failed" if an invalid or missing token is provided
 
 ### 4. Vulnerable Dependencies Demo
 
@@ -203,7 +201,7 @@ cd frontend && npm audit
 |-----------------|-------------------|-------------------------------|--------------------------------|
 | **Data Security** | PII in uploaded files | `backend/agents/file_processor_agent.py` | `backend/policies/pii_detection.py` |
 | **AI Threats** | Hidden prompts / Prompt injection | `backend/agents/credit_eval_agent.py` | `backend/policies/prompt_injection.py` |
-| **Identity & Access** | Unauthenticated agent calls | `backend/agents/orchestrator_agent.py` | `backend/agents/auth/agent_auth.py` |
+| **Identity & Access** | Authenticated agent calls via JWT | `backend/agents/orchestrator_agent.py` | `backend/agents/auth/agent_auth.py` |
 | **Vulnerability** | Vulnerable npm packages | `frontend/package.json` | *(version update)* |
 | **Vulnerability** | Vulnerable Python packages | `backend/requirements.txt` | *(version update)* |
 
@@ -262,7 +260,7 @@ python scripts/create_test_files.py
 | `AWS_SECRET_ACCESS_KEY` | AWS secret key (not needed when using IAM role) | No | — |
 | `AWS_SESSION_TOKEN` | AWS session token for temporary credentials | No | — |
 | `AWS_PROFILE` | Named AWS profile for local development | No | — |
-| `BEDROCK_MODEL_ID` | Amazon Bedrock model ID to use | No | `amazon.nova-micro-v1:0` |
+| `BEDROCK_MODEL_ID` | Amazon Bedrock model ID to use | No | `amazon.nova-lite-v1:0` |
 | `AGENT_SECRET` | Secret for HMAC inter-agent token signing | No | — |
 | `JWT_SECRET` | Secret for JWT signing (after Unifai remediation) | No | — |
 | `BACKEND_URL` | Backend URL for frontend proxy | No | `http://127.0.0.1:5500` |
