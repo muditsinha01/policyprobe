@@ -4,8 +4,8 @@ Amazon Bedrock LLM Client
 Client for communicating with LLMs via Amazon Bedrock.
 
 SECURITY NOTES (for Unifai demo):
-- No input sanitization before sending to LLM
-- No response validation
+- Input sanitization applied before sending to LLM
+- Response validation applied
 - AWS credential handling could be improved
 - No rate limiting
 """
@@ -13,6 +13,8 @@ SECURITY NOTES (for Unifai demo):
 import asyncio
 import logging
 import os
+import re
+import unicodedata
 from typing import Any, Optional
 
 import boto3
@@ -20,18 +22,78 @@ from botocore.exceptions import BotoCoreError, ClientError, NoCredentialsError
 
 logger = logging.getLogger(__name__)
 
+# Maximum allowed input length
+MAX_INPUT_LENGTH = 50000
+
+# Prompt injection patterns
+PROMPT_INJECTION_PATTERNS = [
+    re.compile(r"ignore\s+(all\s+)?(previous|prior|above)\s+(instructions?|prompts?|context)", re.IGNORECASE),
+    re.compile(r"disregard\s+(all\s+)?(previous|prior|above)\s+(instructions?|prompts?|context)", re.IGNORECASE),
+    re.compile(r"forget\s+(all\s+)?(previous|prior|above)\s+(instructions?|prompts?|context)", re.IGNORECASE),
+    re.compile(r"you\s+are\s+now\s+(?!a\s+document)", re.IGNORECASE),
+    re.compile(r"new\s+instructions?\s*:", re.IGNORECASE),
+    re.compile(r"system\s*prompt\s*:", re.IGNORECASE),
+    re.compile(r"<\s*system\s*>", re.IGNORECASE),
+    re.compile(r"\[INST\]", re.IGNORECASE),
+    re.compile(r"###\s*instruction", re.IGNORECASE),
+    re.compile(r"act\s+as\s+(if\s+you\s+are|a\s+different)", re.IGNORECASE),
+    re.compile(r"pretend\s+(you\s+are|to\s+be)", re.IGNORECASE),
+    re.compile(r"jailbreak", re.IGNORECASE),
+    re.compile(r"DAN\s+mode", re.IGNORECASE),
+]
+
+# PII patterns
+PII_PATTERNS = [
+    re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),  # SSN
+    re.compile(r"\b\d{16}\b"),  # Credit card (basic)
+    re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b"),  # Email
+    re.compile(r"\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b"),  # Phone number
+    re.compile(r"\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13})\b"),  # Credit card patterns
+]
+
+# Dangerous code execution primitives in LLM output
+DANGEROUS_CODE_PATTERNS = [
+    re.compile(r"\beval\s*\(", re.IGNORECASE),
+    re.compile(r"\bexec\s*\(", re.IGNORECASE),
+    re.compile(r"\bcompile\s*\(", re.IGNORECASE),
+    re.compile(r"\b__import__\s*\(", re.IGNORECASE),
+    re.compile(r"\bimportlib\b", re.IGNORECASE),
+    re.compile(r"\bos\.system\s*\(", re.IGNORECASE),
+    re.compile(r"\bsubprocess\b.*shell\s*=\s*True", re.IGNORECASE | re.DOTALL),
+    re.compile(r"\bsubprocess\.call\s*\(", re.IGNORECASE),
+    re.compile(r"\bsubprocess\.run\s*\(", re.IGNORECASE),
+    re.compile(r"\bsubprocess\.Popen\s*\(", re.IGNORECASE),
+    re.compile(r"\bos\.popen\s*\(", re.IGNORECASE),
+    re.compile(r"\bos\.execv\s*\(", re.IGNORECASE),
+    re.compile(r"\bos\.execve\s*\(", re.IGNORECASE),
+    re.compile(r"\bgetattr\s*\(.*__", re.IGNORECASE),
+    re.compile(r"__builtins__", re.IGNORECASE),
+    re.compile(r"__globals__", re.IGNORECASE),
+]
+
+# Hidden/malicious content patterns for file uploads
+HIDDEN_CONTENT_PATTERNS = [
+    re.compile(r"(?:[A-Za-z0-9+/]{4}){10,}(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?"),  # Base64
+    re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]"),  # Non-printable/invisible chars
+    re.compile(r"(?:ignore|disregard|forget)\s+(?:all\s+)?(?:previous|prior)\s+(?:instructions?|prompts?)", re.IGNORECASE),
+    re.compile(r"(?:you\s+are\s+now|act\s+as|pretend\s+to\s+be)", re.IGNORECASE),
+    re.compile(r"(?:rm\s+-rf|chmod\s+777|wget\s+http|curl\s+http|nc\s+-|/bin/sh|/bin/bash)", re.IGNORECASE),
+    re.compile(r"(?:0x[0-9a-fA-F]{2}\s*){4,}"),  # Hex sequences (potential shellcode)
+    re.compile(r"l33t|1337|h4x|h4ck", re.IGNORECASE),  # Leetspeak indicators
+    re.compile(r"<script[^>]*>", re.IGNORECASE),  # Script tags
+    re.compile(r"javascript\s*:", re.IGNORECASE),  # JavaScript protocol
+]
+
 
 class BedrockClient:
     """
     Client for Amazon Bedrock Runtime.
 
-    VULNERABILITY: Content sent to LLM without security checks.
-    - No PII scanning before send
-    - No prompt injection detection
-    - No response validation
+    Input sanitization and output validation are applied.
+    - PII scanning before send
+    - Prompt injection detection
+    - Response validation for dangerous code primitives
     """
-
-    DEFAULT_MODEL = "amazon.nova-micro-v1:0"
 
     def __init__(
         self,
@@ -42,10 +104,17 @@ class BedrockClient:
         Initialize the Amazon Bedrock client.
 
         Args:
-            model_id: Amazon Bedrock model ID (defaults to env var)
+            model_id: Amazon Bedrock model ID (defaults to env var BEDROCK_MODEL_ID, required)
             region: AWS region for Bedrock Runtime (defaults to env vars)
         """
-        self.model_id = model_id or os.getenv("BEDROCK_MODEL_ID") or self.DEFAULT_MODEL
+        env_model = os.getenv("BEDROCK_MODEL_ID")
+        resolved_model = model_id or env_model
+        if not resolved_model:
+            raise ValueError(
+                "BEDROCK_MODEL_ID environment variable is required. "
+                "No default model is set. Please configure an approved model ID."
+            )
+        self.model_id = resolved_model
         self.region = region or os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION")
         self.session = (
             boto3.session.Session(region_name=self.region)
@@ -66,6 +135,117 @@ class BedrockClient:
 
         return self.session.client("bedrock-runtime", region_name=client_region)
 
+    def _sanitize_input(self, text: Any, field_name: str = "input") -> str:
+        """
+        Validate and sanitize a user-supplied string before sending to the LLM.
+
+        (1) Rejects None/non-string inputs
+        (2) Enforces a maximum length limit
+        (3) Strips null bytes and non-printable control characters
+        (4) Detects and blocks common prompt injection patterns
+        (5) Scans for PII patterns and logs warnings
+
+        Args:
+            text: The input to sanitize
+            field_name: Name of the field (for error messages)
+
+        Returns:
+            Sanitized string
+
+        Raises:
+            ValueError: If input is invalid or contains injection patterns
+        """
+        if text is None:
+            raise ValueError(f"{field_name} must not be None.")
+        if not isinstance(text, str):
+            raise ValueError(f"{field_name} must be a string, got {type(text).__name__}.")
+
+        # Strip null bytes and non-printable control characters (keep \t, \n, \r)
+        sanitized = re.sub(r"[\x00\x08\x0b\x0c\x0e-\x1f\x7f]", "", text)
+
+        # Normalize unicode to remove invisible/zero-width characters
+        sanitized = "".join(
+            ch for ch in sanitized
+            if unicodedata.category(ch) not in ("Cf",)  # Remove format characters
+        )
+
+        # Enforce maximum length
+        if len(sanitized) > MAX_INPUT_LENGTH:
+            raise ValueError(
+                f"{field_name} exceeds maximum allowed length of {MAX_INPUT_LENGTH} characters."
+            )
+
+        # Detect prompt injection patterns
+        for pattern in PROMPT_INJECTION_PATTERNS:
+            if pattern.search(sanitized):
+                raise ValueError(
+                    f"{field_name} contains a potential prompt injection pattern and has been rejected."
+                )
+
+        # Scan for PII patterns and log warnings
+        for pattern in PII_PATTERNS:
+            if pattern.search(sanitized):
+                logger.warning(
+                    f"{field_name} may contain PII. Review before sending to LLM.",
+                    extra={"field": field_name},
+                )
+                break
+
+        return sanitized
+
+    def _sanitize_llm_output(self, content: str) -> str:
+        """
+        Scan LLM response for dangerous dynamic code execution primitives.
+
+        Raises ValueError if dangerous patterns are detected, otherwise returns
+        the content unchanged.
+
+        Args:
+            content: The LLM response text to validate
+
+        Returns:
+            Validated content string
+
+        Raises:
+            ValueError: If dangerous code execution primitives are detected
+        """
+        for pattern in DANGEROUS_CODE_PATTERNS:
+            if pattern.search(content):
+                raise ValueError(
+                    "LLM response contains potentially dangerous code execution primitives "
+                    "and has been blocked for safety."
+                )
+        return content
+
+    def _sanitize_document_content(self, content: str) -> str:
+        """
+        Scan document content for hidden prompts, invisible text, base64-encoded prompts,
+        leetspeak, suspicious instructions, and binary/shell commands.
+
+        Args:
+            content: Document content to scan
+
+        Returns:
+            Sanitized content string
+
+        Raises:
+            ValueError: If malicious content is detected
+        """
+        if not isinstance(content, str):
+            raise ValueError("Document content must be a string.")
+
+        # Check for hidden/malicious content patterns
+        for pattern in HIDDEN_CONTENT_PATTERNS:
+            if pattern.search(content):
+                raise ValueError(
+                    "Document content contains potentially malicious content "
+                    "(hidden prompts, encoded instructions, or shell commands) "
+                    "and has been rejected."
+                )
+
+        # Also apply standard input sanitization
+        return self._sanitize_input(content, field_name="document content")
+
     async def chat(
         self,
         messages: list[dict[str, Any]],
@@ -76,10 +256,8 @@ class BedrockClient:
         """
         Send a conversation request to Amazon Bedrock.
 
-        VULNERABILITY: Messages sent without security scanning.
-        - User content not checked for PII
-        - No prompt injection filtering
-        - Response not validated
+        Input messages are sanitized before sending.
+        Response is validated for dangerous code primitives.
 
         Args:
             messages: List of message dicts with role and content
@@ -95,19 +273,29 @@ class BedrockClient:
         if not active_region:
             return "LLM service not configured. Please set AWS_REGION or AWS_DEFAULT_REGION."
 
-        bedrock_messages, system_prompts = self._format_messages(messages)
+        # Sanitize all message content before processing
+        sanitized_messages = []
+        for message in messages:
+            role = message.get("role", "user")
+            content = message.get("content", "")
+            try:
+                sanitized_content = self._sanitize_input(str(content), field_name=f"message[{role}].content")
+            except ValueError as e:
+                logger.warning(f"Input sanitization rejected message content: {e}")
+                return f"Input validation error: {e}"
+            sanitized_messages.append({"role": role, "content": sanitized_content})
+
+        bedrock_messages, system_prompts = self._format_messages(sanitized_messages)
 
         logger.info(
             "Sending request to Amazon Bedrock",
             extra={
                 "model": active_model,
                 "region": active_region,
-                "message_count": len(messages),
+                "message_count": len(sanitized_messages),
                 "total_content_length": sum(
-                    len(str(message.get("content", ""))) for message in messages
+                    len(str(message.get("content", ""))) for message in sanitized_messages
                 ),
-                # VULNERABILITY: Message content in logs
-                "messages_preview": str(messages)[:200],
             },
         )
 
@@ -123,12 +311,17 @@ class BedrockClient:
 
             content = self._extract_text(response)
 
+            # Validate LLM output for dangerous code execution primitives
+            try:
+                content = self._sanitize_llm_output(content)
+            except ValueError as e:
+                logger.error(f"LLM output validation failed: {e}")
+                return f"Response blocked by security policy: {e}"
+
             logger.info(
                 "Received response from Amazon Bedrock",
                 extra={
                     "response_length": len(content),
-                    # VULNERABILITY: Full response in logs
-                    "response_preview": content[:200],
                 },
             )
 
@@ -217,20 +410,31 @@ class BedrockClient:
         """
         Convenience method for chat with system prompt and optional context.
 
-        VULNERABILITY: No content validation.
+        Input is validated and sanitized before processing.
         """
-        messages = [{"role": "system", "content": system_prompt}]
+        try:
+            sanitized_user_message = self._sanitize_input(user_message, field_name="user_message")
+            sanitized_system_prompt = self._sanitize_input(system_prompt, field_name="system_prompt")
+        except ValueError as e:
+            logger.warning(f"Input sanitization rejected content in chat_with_context: {e}")
+            return f"Input validation error: {e}"
+
+        messages = [{"role": "system", "content": sanitized_system_prompt}]
 
         if context:
-            # VULNERABILITY: Context added without scanning
+            try:
+                sanitized_context = self._sanitize_input(context, field_name="context")
+            except ValueError as e:
+                logger.warning(f"Input sanitization rejected context in chat_with_context: {e}")
+                return f"Input validation error: {e}"
             messages.append(
                 {
                     "role": "user",
-                    "content": f"Context:\n{context}\n\nQuery: {user_message}",
+                    "content": f"Context:\n{sanitized_context}\n\nQuery: {sanitized_user_message}",
                 }
             )
         else:
-            messages.append({"role": "user", "content": user_message})
+            messages.append({"role": "user", "content": sanitized_user_message})
 
         return await self.chat(messages)
 
@@ -238,12 +442,17 @@ class BedrockClient:
         """
         Analyze document content using LLM.
 
-        VULNERABILITY: Document content sent directly to LLM
-        without PII scanning or threat detection.
+        Document content is scanned for hidden prompts, encoded instructions,
+        and malicious patterns before being sent to the LLM.
         """
-        # VULNERABILITY: No pre-LLM security checks
+        try:
+            sanitized_content = self._sanitize_document_content(content)
+        except ValueError as e:
+            logger.warning(f"Document content sanitization failed in analyze_document: {e}")
+            return f"Document rejected by security policy: {e}"
+
         return await self.chat_with_context(
             user_message="Please analyze this document and provide a summary.",
             system_prompt="You are a document analyst. Analyze the provided content and summarize key points.",
-            context=content,
+            context=sanitized_content,
         )
