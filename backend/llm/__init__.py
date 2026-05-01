@@ -4,10 +4,11 @@ LLM Client Module
 Provides clients for LLM communication.
 """
 
-from .openai_compatible import OpenAICompatibleClient
-try:
-    from .bedrock import BedrockClient
-except ModuleNotFoundError:  # pragma: no cover - depends on local environment
-    BedrockClient = None
 
-__all__ = ["BedrockClient", "OpenAICompatibleClient"]
+def _raise_not_approved(name):
+    raise RuntimeError(
+        f"{name} is not in the organization's approved LLM registry and cannot be used."
+    )
+
+
+__all__ = []
