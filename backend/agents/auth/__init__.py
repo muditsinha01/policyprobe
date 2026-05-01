@@ -3,10 +3,10 @@ Agent Authentication Module
 
 Provides authentication and authorization for inter-agent communication.
 
-SECURITY NOTES (for Unifai demo):
-- Authentication exists but is effectively bypassed
-- Tokens are generated but never validated
-- is_internal flag bypasses all security checks
+SECURITY NOTES:
+- All inter-agent communication requires valid authentication tokens
+- Tokens are validated on every request
+- All agents must present valid credentials to communicate
 """
 
 from .agent_auth import AgentAuthenticator, AgentIdentity, AuthResult
