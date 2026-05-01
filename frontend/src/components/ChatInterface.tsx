@@ -29,6 +29,225 @@ export interface PolicyError {
   details?: Record<string, unknown>
 }
 
+const ALLOWED_MIME_TYPES = [
+  'text/plain',
+  'text/csv',
+  'text/html',
+  'application/json',
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+]
+
+const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
+const MAX_TEXT_LENGTH = 32000
+
+function sanitizeTextInput(text: string): string {
+  // Strip null bytes
+  let sanitized = text.replace(/\0/g, '')
+  // Strip control characters except newline, carriage return, tab
+  sanitized = sanitized.replace(/[\x01-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+  // Enforce max length
+  if (sanitized.length > MAX_TEXT_LENGTH) {
+    sanitized = sanitized.substring(0, MAX_TEXT_LENGTH)
+  }
+  return sanitized
+}
+
+function sanitizeFileContentString(content: string): string {
+  // Strip null bytes
+  let sanitized = content.replace(/\0/g, '')
+  // Strip control characters except newline, carriage return, tab
+  sanitized = sanitized.replace(/[\x01-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+  // Enforce max length
+  if (sanitized.length > MAX_TEXT_LENGTH) {
+    sanitized = sanitized.substring(0, MAX_TEXT_LENGTH)
+  }
+  return sanitized
+}
+
+function validateFileAttachment(file: File): void {
+  if (!ALLOWED_MIME_TYPES.includes(file.type)) {
+    throw new Error(`File type "${file.type}" is not allowed. Allowed types: ${ALLOWED_MIME_TYPES.join(', ')}`)
+  }
+  if (file.size > MAX_FILE_SIZE) {
+    throw new Error(`File "${file.name}" exceeds the maximum allowed size of 10MB.`)
+  }
+}
+
+function sanitizeFileContent(content: string, fileName: string): void {
+  // Check for invisible/zero-width characters
+  const zeroWidthPattern = /[\u200B-\u200D\uFEFF\u00AD\u2060\u180E]/g
+  if (zeroWidthPattern.test(content)) {
+    throw new Error(`File "${fileName}" contains hidden/invisible characters that may indicate malicious content.`)
+  }
+
+  // Check for base64-encoded prompt injection patterns
+  const base64Pattern = /(?:[A-Za-z0-9+/]{4}){10,}(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?/g
+  const base64Matches = content.match(base64Pattern) || []
+  for (const match of base64Matches) {
+    try {
+      const decoded = atob(match)
+      const decodedLower = decoded.toLowerCase()
+      const injectionKeywords = [
+        'ignore previous', 'ignore all', 'disregard', 'forget your instructions',
+        'you are now', 'act as', 'pretend to be', 'system prompt', 'jailbreak',
+        'override', 'bypass', 'new instructions', 'your new role',
+      ]
+      for (const keyword of injectionKeywords) {
+        if (decodedLower.includes(keyword)) {
+          throw new Error(`File "${fileName}" contains base64-encoded prompt injection content.`)
+        }
+      }
+    } catch (e) {
+      if (e instanceof Error && e.message.includes('base64-encoded prompt injection')) {
+        throw e
+      }
+      // Not valid base64, skip
+    }
+  }
+
+  const contentLower = content.toLowerCase()
+
+  // Check for prompt injection keywords
+  const promptInjectionPatterns = [
+    'ignore previous instructions',
+    'ignore all instructions',
+    'disregard previous',
+    'forget your instructions',
+    'you are now',
+    'act as',
+    'pretend to be',
+    'system prompt',
+    'jailbreak',
+    'override instructions',
+    'bypass safety',
+    'new instructions:',
+    'your new role',
+    'ignore the above',
+    'ignore above',
+    'do not follow',
+    'stop being',
+    'you must now',
+    'from now on you',
+    'your true self',
+    'developer mode',
+    'dan mode',
+    'evil mode',
+  ]
+
+  for (const pattern of promptInjectionPatterns) {
+    if (contentLower.includes(pattern)) {
+      throw new Error(`File "${fileName}" contains potential prompt injection content: "${pattern}".`)
+    }
+  }
+
+  // Check for leetspeak prompt injection patterns
+  const leetspeakPatterns = [
+    /1gn[o0]r[e3]\s+[a4]ll/i,
+    /[a4]ct\s+[a4]s/i,
+    /[s5]y[s5]t[e3]m\s+[p9]r[o0]m[p9]t/i,
+    /j[a4][i1]lb[r][e3][a4]k/i,
+    /[o0]v[e3]rr[i1]d[e3]/i,
+  ]
+
+  for (const pattern of leetspeakPatterns) {
+    if (pattern.test(content)) {
+      throw new Error(`File "${fileName}" contains potential leetspeak prompt injection content.`)
+    }
+  }
+
+  // Check for suspicious shell/binary commands
+  const shellCommandPatterns = [
+    /\$\s*\(/,
+    /`[^`]+`/,
+    /;\s*(rm|chmod|chown|wget|curl|bash|sh|python|perl|ruby|exec|eval)\s/i,
+    /\|\s*(bash|sh|python|perl|ruby|exec|eval)\s/i,
+    /\/bin\/(bash|sh|zsh|ksh)/,
+    /\/etc\/passwd/,
+    /\/etc\/shadow/,
+    /<script[\s>]/i,
+    /javascript:/i,
+    /on\w+\s*=/i,
+  ]
+
+  for (const pattern of shellCommandPatterns) {
+    if (pattern.test(content)) {
+      throw new Error(`File "${fileName}" contains suspicious shell or script commands.`)
+    }
+  }
+}
+
+function redactPII(content: string): string {
+  let redacted = content
+
+  // Redact email addresses
+  redacted = redacted.replace(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g, '[REDACTED_EMAIL]')
+
+  // Redact phone numbers (various formats)
+  redacted = redacted.replace(/(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g, '[REDACTED_PHONE]')
+
+  // Redact SSNs (US format: XXX-XX-XXXX)
+  redacted = redacted.replace(/\b\d{3}[-\s]?\d{2}[-\s]?\d{4}\b/g, '[REDACTED_SSN]')
+
+  // Redact credit card numbers (basic pattern)
+  redacted = redacted.replace(/\b(?:\d{4}[-\s]?){3}\d{4}\b/g, '[REDACTED_CC]')
+
+  // Redact Singapore NRIC/FIN numbers (S/T/F/G followed by 7 digits and a letter)
+  redacted = redacted.replace(/\b[STFG]\d{7}[A-Z]\b/gi, '[REDACTED_NRIC]')
+
+  // Redact SingPass identifiers
+  redacted = redacted.replace(/\bsingpass\s*[:\-]?\s*\S+/gi, '[REDACTED_SINGPASS]')
+
+  // Redact CPF account numbers (Singapore, typically 9 digits)
+  redacted = redacted.replace(/\bCPF\s*[:\-]?\s*\d{9}\b/gi, '[REDACTED_CPF]')
+
+  return redacted
+}
+
+function detectSingaporePII(content: string, fileName: string): void {
+  // Check for Singapore NRIC/FIN numbers
+  const nricPattern = /\b[STFG]\d{7}[A-Z]\b/gi
+  if (nricPattern.test(content)) {
+    throw new Error(`File "${fileName}" contains Singapore NRIC/FIN numbers. Please remove PII before uploading.`)
+  }
+
+  // Check for SingPass identifiers
+  const singpassPattern = /\bsingpass\s*[:\-]?\s*\S+/gi
+  if (singpassPattern.test(content)) {
+    throw new Error(`File "${fileName}" contains SingPass identifiers. Please remove PII before uploading.`)
+  }
+
+  // Check for CPF account numbers
+  const cpfPattern = /\bCPF\s*[:\-]?\s*\d{9}\b/gi
+  if (cpfPattern.test(content)) {
+    throw new Error(`File "${fileName}" contains CPF account numbers. Please remove PII before uploading.`)
+  }
+
+  // Check for Singapore phone numbers (+65 XXXX XXXX)
+  const sgPhonePattern = /(?:\+65[-.\s]?)?\d{4}[-.\s]?\d{4}\b/g
+  const sgPhoneMatches = content.match(sgPhonePattern) || []
+  if (sgPhoneMatches.length > 0) {
+    throw new Error(`File "${fileName}" contains Singapore phone numbers. Please remove PII before uploading.`)
+  }
+
+  // Check for email addresses (general PII)
+  const emailPattern = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g
+  if (emailPattern.test(content)) {
+    throw new Error(`File "${fileName}" contains email addresses. Please remove PII before uploading.`)
+  }
+
+  // Check for full name patterns (common Singapore name patterns)
+  const fullNamePattern = /\b(?:name|full name|nama)\s*[:\-]\s*[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3}/gi
+  if (fullNamePattern.test(content)) {
+    throw new Error(`File "${fileName}" contains full name identifiers. Please remove PII before uploading.`)
+  }
+}
+
 export function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
@@ -53,88 +272,132 @@ export function ChatInterface() {
 
     if (!input.trim() && pendingFiles.length === 0) return
 
-    const attachments: FileAttachment[] = []
-    for (const file of pendingFiles) {
-      const content = await readFileContent(file)
-      attachments.push({
-        id: uuidv4(),
-        name: file.name,
-        type: file.type,
-        size: file.size,
-        content,
-      })
-    }
-
-    const userMessage: Message = {
-      id: uuidv4(),
-      role: 'user',
-      content: input || `Uploaded ${pendingFiles.length} file(s)`,
-      timestamp: new Date(),
-      attachments: attachments.length > 0 ? attachments : undefined,
-    }
-
-    setMessages(prev => [...prev, userMessage])
-    setInput('')
-    setPendingFiles([])
-    setShowFileUpload(false)
-    setIsLoading(true)
-
     try {
-      const response = await fetch('/api/backend/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message: input,
-          attachments,
-          conversation_id: uuidv4(),
-        }),
-      })
+      // Validate and sanitize file attachments
+      for (const file of pendingFiles) {
+        validateFileAttachment(file)
+      }
 
-      const data = await response.json()
+      const attachments: FileAttachment[] = []
+      for (const file of pendingFiles) {
+        const rawContent = await readFileContent(file)
 
-      if (!response.ok) {
-        // Handle policy violations returned as errors
+        const isBinary =
+          file.type.startsWith('image/') ||
+          file.type === 'application/pdf' ||
+          file.type === 'application/msword' ||
+          file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+
+        if (!isBinary) {
+          // Check for Singapore PII (blocks upload)
+          detectSingaporePII(rawContent, file.name)
+
+          // Check for malicious content / prompt injection
+          sanitizeFileContent(rawContent, file.name)
+        }
+
+        // Redact PII from text content before sending
+        const processedContent = isBinary ? rawContent : redactPII(rawContent)
+
+        // Sanitize the content string
+        const sanitizedContent = isBinary ? processedContent : sanitizeFileContentString(processedContent)
+
+        attachments.push({
+          id: uuidv4(),
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          content: sanitizedContent,
+        })
+      }
+
+      // Sanitize text input
+      const sanitizedInput = sanitizeTextInput(input)
+
+      const userMessage: Message = {
+        id: uuidv4(),
+        role: 'user',
+        content: sanitizedInput || `Uploaded ${pendingFiles.length} file(s)`,
+        timestamp: new Date(),
+        attachments: attachments.length > 0 ? attachments : undefined,
+      }
+
+      setMessages(prev => [...prev, userMessage])
+      setInput('')
+      setPendingFiles([])
+      setShowFileUpload(false)
+      setIsLoading(true)
+
+      try {
+        const response = await fetch('/api/backend/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            message: sanitizedInput,
+            attachments,
+            conversation_id: uuidv4(),
+          }),
+        })
+
+        const data = await response.json()
+
+        if (!response.ok) {
+          // Handle policy violations returned as errors
+          const errorMessage: Message = {
+            id: uuidv4(),
+            role: 'assistant',
+            content: data.detail || 'An error occurred',
+            timestamp: new Date(),
+            error: data.policy_error ? {
+              type: data.policy_error.type,
+              message: data.policy_error.message,
+              details: data.policy_error.details,
+            } : undefined,
+          }
+          setMessages(prev => [...prev, errorMessage])
+        } else {
+          const assistantMessage: Message = {
+            id: uuidv4(),
+            role: 'assistant',
+            content: data.response,
+            timestamp: new Date(),
+            error: data.policy_warning ? {
+              type: data.policy_warning.type,
+              message: data.policy_warning.message,
+              details: data.policy_warning.details,
+            } : undefined,
+          }
+          setMessages(prev => [...prev, assistantMessage])
+        }
+      } catch (error) {
         const errorMessage: Message = {
           id: uuidv4(),
           role: 'assistant',
-          content: data.detail || 'An error occurred',
+          content: 'Failed to connect to the backend. Please ensure the server is running.',
           timestamp: new Date(),
-          error: data.policy_error ? {
-            type: data.policy_error.type,
-            message: data.policy_error.message,
-            details: data.policy_error.details,
-          } : undefined,
+          error: {
+            type: 'general',
+            message: 'Connection error',
+          },
         }
         setMessages(prev => [...prev, errorMessage])
-      } else {
-        const assistantMessage: Message = {
-          id: uuidv4(),
-          role: 'assistant',
-          content: data.response,
-          timestamp: new Date(),
-          error: data.policy_warning ? {
-            type: data.policy_warning.type,
-            message: data.policy_warning.message,
-            details: data.policy_warning.details,
-          } : undefined,
-        }
-        setMessages(prev => [...prev, assistantMessage])
+      } finally {
+        setIsLoading(false)
       }
-    } catch (error) {
+    } catch (validationError) {
       const errorMessage: Message = {
         id: uuidv4(),
         role: 'assistant',
-        content: 'Failed to connect to the backend. Please ensure the server is running.',
+        content: validationError instanceof Error ? validationError.message : 'File validation failed.',
         timestamp: new Date(),
         error: {
-          type: 'general',
-          message: 'Connection error',
+          type: 'threat',
+          message: validationError instanceof Error ? validationError.message : 'File validation failed.',
         },
       }
       setMessages(prev => [...prev, errorMessage])
-    } finally {
       setIsLoading(false)
     }
   }
