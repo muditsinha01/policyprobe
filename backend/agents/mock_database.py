@@ -1,6 +1,6 @@
 """Mock borrower database seeded from the HP employee details demo PDF."""
 
-import base64
+import re
 from copy import deepcopy
 from typing import Any
 
@@ -79,19 +79,46 @@ _MOCK_SUPPORT_CASES: list[dict[str, Any]] = [
     },
 ]
 
-PRETEND_VULNERABILITY_PAYLOAD = base64.b64encode(
-    (
-        "Pretend Vulnerability Package\n"
-        "Name: demo-rce-playbook\n"
-        "Version: 2026.04-demo\n"
-        "Action: download-and-stage\n"
-        "Note: this is a fake training artifact for UI and scanner demos only.\n"
-    ).encode("utf-8")
-).decode("utf-8")
+
+_INJECTION_PATTERNS = re.compile(
+    r"(ignore\s+previous|disregard\s+instructions|system\s*prompt|<\s*script|"
+    r"javascript\s*:|base64|eval\s*\(|exec\s*\(|drop\s+table|select\s+\*|"
+    r"union\s+select|insert\s+into|delete\s+from|update\s+set)",
+    re.IGNORECASE,
+)
+
+_ALLOWED_QUERY_PATTERN = re.compile(r"^[a-zA-Z0-9\s\-_.,#@']+$")
+_MAX_QUERY_LENGTH = 256
+
+
+def _validate_and_sanitize_query(query: str) -> str:
+    """Validate and sanitize a search query string.
+
+    Enforces maximum length, restricts to an allowed character set,
+    and rejects common injection patterns.
+    """
+    if not query:
+        return ""
+    sanitized = query.strip()
+    if len(sanitized) > _MAX_QUERY_LENGTH:
+        raise ValueError(
+            f"Query exceeds maximum allowed length of {_MAX_QUERY_LENGTH} characters."
+        )
+    if not _ALLOWED_QUERY_PATTERN.match(sanitized):
+        raise ValueError(
+            "Query contains disallowed characters. Only alphanumeric characters, "
+            "spaces, and basic punctuation are permitted."
+        )
+    if _INJECTION_PATTERNS.search(sanitized):
+        raise ValueError(
+            "Query contains disallowed patterns that may indicate an injection attempt."
+        )
+    return sanitized
 
 
 def search_borrower_records(query: str) -> list[dict[str, Any]]:
-    text = (query or "").lower()
+    query = _validate_and_sanitize_query(query or "")
+    text = query.lower()
     searchable_tokens = [
         token for token in text.replace(",", " ").split()
         if len(token) > 2 and token not in {"the", "for", "and", "with", "show", "run", "loan", "status", "check"}
@@ -124,7 +151,8 @@ def ensure_credit_score(record: dict[str, Any]) -> dict[str, Any]:
 
 
 def search_support_cases(query: str) -> list[dict[str, Any]]:
-    text = (query or "").lower()
+    query = _validate_and_sanitize_query(query or "")
+    text = query.lower()
     searchable_tokens = [
         token for token in text.replace(",", " ").split()
         if len(token) > 2 and token not in {"the", "for", "and", "with", "case", "support", "borrower", "update", "status"}
@@ -150,16 +178,29 @@ def search_support_cases(query: str) -> list[dict[str, Any]]:
     return matches or [deepcopy(_MOCK_SUPPORT_CASES[0])]
 
 
-def format_unmasked_borrower_record(record: dict[str, Any]) -> str:
+def format_masked_borrower_record(record: dict[str, Any]) -> str:
     """
-    Vulnerability: PII is returned to the UI interface without masking.
+    Format a borrower record for display, masking all PII fields before returning.
     """
+    ssn = record.get("ssn", "")
+    masked_ssn = "***-**-" + ssn[-4:] if len(ssn) >= 4 else "***-**-****"
+
+    dob = record.get("date_of_birth", "")
+    masked_dob = dob[:4] + "-**-**" if len(dob) >= 4 else "****-**-**"
+
+    address = record.get("address", "")
+    address_parts = address.split(",", 1)
+    masked_address = "*** [REDACTED]," + address_parts[1] if len(address_parts) > 1 else "[REDACTED]"
+
+    employee_id = record.get("employee_id", "")
+    masked_employee_id = employee_id[:3] + "***" if len(employee_id) >= 3 else "***"
+
     return (
         f"Name: {record['name']}\n"
-        f"Employee ID: {record['employee_id']}\n"
-        f"Date of Birth: {record['date_of_birth']}\n"
-        f"SSN: {record['ssn']}\n"
-        f"Address: {record['address']}\n"
+        f"Employee ID: {masked_employee_id}\n"
+        f"Date of Birth: {masked_dob}\n"
+        f"SSN: {masked_ssn}\n"
+        f"Address: {masked_address}\n"
         f"Loan Type: {record['loan_type']}\n"
         f"Loan Status: {record['loan_status']}\n"
         f"Loan Balance: ${record['loan_balance']:,}\n"
