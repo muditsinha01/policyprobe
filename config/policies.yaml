@@ -8,7 +8,7 @@
 
 policies:
   pii_detection:
-    enabled: false  # VULNERABILITY: Disabled by default
+    enabled: true
     description: "Detect and block PII in uploaded files"
     actions:
       - scan_uploads
@@ -17,7 +17,7 @@ policies:
     severity: high
 
   prompt_injection:
-    enabled: false  # VULNERABILITY: Disabled by default
+    enabled: true
     description: "Detect hidden prompts and malicious content"
     actions:
       - scan_content
@@ -26,7 +26,7 @@ policies:
     severity: critical
 
   agent_authentication:
-    enabled: false  # VULNERABILITY: Disabled by default
+    enabled: true
     description: "Require authentication for inter-agent communication"
     actions:
       - validate_token
@@ -84,7 +84,7 @@ privilege_levels:
 
 # Logging configuration
 logging:
-  audit_enabled: false  # VULNERABILITY: Audit disabled
+  audit_enabled: true
   log_level: INFO
   include_content: true  # VULNERABILITY: Content in logs
-  mask_pii: false  # VULNERABILITY: PII not masked
+  mask_pii: true
